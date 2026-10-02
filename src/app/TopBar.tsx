@@ -16,7 +16,7 @@ interface Place {
 }
 
 /** What the url means, in words. */
-export function placeOf(url: string, meta: WorkspaceView): Place {
+export function placeOf(url: string, meta: Pick<WorkspaceView, 'teams' | 'projects'>): Place {
   const path = url.split('?')[0]!;
   const team = /^\/team\/([^/]+)\/(list|board)$/.exec(path);
   if (team !== null) {
@@ -44,8 +44,8 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const issues = ctx.channel(Issues);
 
   const place = new BehaviorSubject<Place>({ title: '', team: null, view: null });
-  ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects]), ([url]) =>
-    place.next(placeOf(url, snapshot(meta.view)))
+  ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects]), ([url, teams, projects]) =>
+    place.next(placeOf(url, { teams, projects }))
   );
 
   return (
@@ -79,15 +79,4 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
       </row>
     </row>
   );
-}
-
-function snapshot(view: { [K in keyof WorkspaceView]: { value: WorkspaceView[K] } }): WorkspaceView {
-  return {
-    teams: view.teams.value,
-    states: view.states.value,
-    users: view.users.value,
-    labels: view.labels.value,
-    projects: view.projects.value,
-    me: view.me.value
-  };
 }

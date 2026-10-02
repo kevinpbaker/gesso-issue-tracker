@@ -4,10 +4,10 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `14ad005`. Not yet pushed or released. Every fix has a spec that fails without it,
-a changeset, and docs where behavior changed. Gesso's full
-`pnpm check` passes with them: format, lint, types, 4,458 tests,
-build, API reports and the docs build.
+per fix, `2c572e3` through `1dfb6c2`. Not yet pushed or released. Every
+fix has a spec that fails without it, a changeset, and docs where
+behavior changed. Gesso's full `pnpm check` passes with them: format,
+lint, types, 4,461 tests, build, API reports and the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -104,6 +104,42 @@ read null.
 reload makes". The tracker still reads params through
 `src/app/params.ts`, which keeps screens out of the import cycle.
 
+### 6. A window resized back kept the other size
+
+**What:** make the window taller, then shorter again, and the sidebar
+stayed at the taller height: the theme switch at its foot went off
+screen, and hit-testing followed the stale boxes. Growing could fail
+the same way. Two holes in the measure memo:
+
+- **A percentage's base wasn't part of the memo.** The sidebar pane is
+  `height: 100%`, and was asked the same loose question under both
+  windows, so it got the old height back. The base is now matched too,
+  per axis, and only for a node with a percentage on that axis, so a
+  `width: 100%` block isn't re-measured when its column's height moves.
+- **A stack trusted its children's last answers.** When a stack's own
+  measurement came from the memo, its children still held their answers
+  to the other window's question, and the stack placed them at those
+  sizes. Flex, grid and custom layouts already re-ask their children
+  when placing them; the stack now does too, which costs nothing when
+  the answer is remembered.
+
+Spec: `LayoutEngine.measure.spec.ts`, "lays out a taller window at the
+taller size" and "lays out a window resized back at the size it came
+from". The 1,000-block editing budget still re-measures under 20 nodes.
+
+### 7. The accessibility mirror could be scrolled out of line
+
+**What:** clicking the sidebar's theme switch by its accessible element
+clicked a project link instead. The mirror's sidebar region had been
+scrolled 49 px by the browser, which scrolls even `overflow: hidden` to
+reveal something it focuses (Tab, a screen reader, an automation tool).
+Everything in it was described 49 px above where it is drawn. This is
+also what looked like the theme preference not saving: the clicks never
+reached the switch. Preferences save and restore correctly.
+
+**Fix:** the mirror uses `overflow: clip`, which can't be scrolled.
+Spec: `SemanticsMirror.spec.ts`, "clips rather than hides overflow".
+
 ## Not a bug, now documented
 
 - **Undo in a multi-block editor.** `historyUndo` and `historyRedo`
@@ -129,12 +165,10 @@ reload makes". The tracker still reads params through
      single-editable editor.
   2. A selection model that spans editables, built on the existing
      cross-node selection for static text.
-- **Percentage widths going stale in lazy rows.** Seen once in Phase 0,
-  against Gesso 0.4.2, under the browser pane's emulated viewport. It
-  doesn't reproduce with the branch, in node (several resizes, mixed
-  content) or in Chrome (flexible board cells with percentage-width
-  cards, resized twice). It may have been the old two-slot cache.
-  Keep an eye out.
+- **Percentage widths going stale in lazy rows.** Seen once in Phase 0
+  and never reproduced since. A percentage-width row asked the same
+  question after a resize got its old width back, which is exactly the
+  hole fixed in 6, so this is very likely the same bug. Keep an eye out.
 - **A `SegmentedControl` bound before it could see the theme's control
   tokens.** Seen once, during a hot-reload session, and not reproduced
   in isolation.

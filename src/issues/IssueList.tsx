@@ -134,7 +134,10 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     const index = located?.kind === 'issue' ? located.index : (located?.group.start ?? first);
     issues.send.setWindow({ start: Math.max(0, index - 2), end: index + VISIBLE });
   };
-  report(0);
+  // The top of any list is index 0, whether a group header or an issue
+  // sits there, so the first window needs nothing from the summary.
+  start = 0;
+  issues.send.setWindow({ start: 0, end: VISIBLE });
 
   /** Scrolls just enough to show an issue's row. */
   const reveal = (index: number): void => {
