@@ -1,0 +1,205 @@
+import { BehaviorSubject, combineLatest } from 'rxjs';
+import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
+
+import type { IssueStore } from '../model/IssueStore';
+import { DEFAULT_QUERY, runQuery, type IssueQuery, type QueryResult } from '../model/query';
+import type { Issue } from '../model/types';
+import type { IssueRow, IssuesSummary } from './IssuesContract';
+
+/**
+ * One list's view of the workspace: a query, a window, and the rows in it.
+ *
+ * Plain RxJS over the store, so it runs in node. It re-runs the whole
+ * query when the query or the store changes, which `query.spec.ts`
+ * holds under 100 ms for 50,000 issues. Making it incremental is a
+ * Phase 3 question, to be answered by measuring the list, not now.
+ */
+
+/** Rows past each end of the window that are published too. */
+export const OVERSCAN = 20;
+
+export class IssueQueryService {
+  readonly query = new BehaviorSubject<IssueQuery>(DEFAULT_QUERY);
+  private readonly range = new BehaviorSubject({ start: 0, end: 50 });
+  private lastMs = 0;
+  private last: QueryResult = { ids: [], groups: [] };
+  private readonly selection = new BehaviorSubject<ReadonlySet<string>>(new Set());
+
+  private readonly names: {
+    readonly states: Map<string, string>;
+    readonly users: Map<string, { name: string; initials: string }>;
+    readonly labels: Map<string, string>;
+    readonly projects: Map<string, string>;
+  };
+
+  readonly result;
+  readonly summary;
+  readonly window;
+  readonly rows;
+  readonly undoLabel;
+  readonly selected;
+  readonly selectedCount;
+
+  constructor(private readonly store: IssueStore) {
+    const { workspace } = store;
+    this.names = {
+      states: new Map(workspace.states.map(state => [state.id, state.name])),
+      users: new Map(
+        workspace.users.map(user => [
+          user.id,
+          {
+            name: user.name,
+            initials: user.name
+              .split(' ')
+              .map(part => part[0])
+              .join('')
+              .slice(0, 2)
+          }
+        ])
+      ),
+      labels: new Map(workspace.labels.map(label => [label.id, label.name])),
+      projects: new Map(workspace.projects.map(project => [project.id, project.name]))
+    };
+
+    this.result = combineLatest([this.query, store.version]).pipe(
+      map(([query]): QueryResult => {
+        const started = performance.now();
+        const result = runQuery(workspace, store.issues(), query);
+        this.last = result;
+        this.lastMs = Math.round((performance.now() - started) * 10) / 10;
+        return result;
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    this.summary = this.result.pipe(
+      map((result): IssuesSummary => ({ total: result.ids.length, groups: result.groups, queryMs: this.lastMs }))
+    );
+
+    const visible = combineLatest([this.result, this.range]).pipe(
+      map(([result, range]) => {
+        const from = Math.max(0, range.start - OVERSCAN);
+        const to = Math.min(result.ids.length, range.end + OVERSCAN);
+        return result.ids.slice(from, to).map((id, offset) => [from + offset, id] as const);
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    this.window = visible.pipe(
+      map(entries => Object.fromEntries(entries.map(([index, id]) => [String(index), id])) as Readonly<Record<string, string>>)
+    );
+
+    // Rows are re-read from the store on every version, but the differ
+    // sends only the rows whose content actually changed.
+    this.rows = combineLatest([visible, store.version]).pipe(
+      map(([entries]) => {
+        const out: Record<string, IssueRow> = {};
+        for (const [, id] of entries) {
+          const issue = store.get(id);
+          if (issue !== undefined) {
+            out[id] = this.row(issue);
+          }
+        }
+        return out as Readonly<Record<string, IssueRow>>;
+      })
+    );
+
+    this.selected = combineLatest([visible, this.selection]).pipe(
+      map(([entries, selection]) => {
+        const out: Record<string, true> = {};
+        for (const [, id] of entries) {
+          if (selection.has(id)) out[id] = true;
+        }
+        return out as Readonly<Record<string, true>>;
+      })
+    );
+    this.selectedCount = this.selection.pipe(
+      map(selection => selection.size),
+      distinctUntilChanged()
+    );
+
+    this.undoLabel = store.version.pipe(
+      map(() => store.undoLabel),
+      distinctUntilChanged()
+    );
+  }
+
+  setQuery(query: IssueQuery): void {
+    // A different filter is a different list, and a selection made in
+    // the old one would act on issues nobody can see. Sorting, grouping
+    // and folding keep it: the same issues, arranged differently.
+    if (JSON.stringify(query.filter) !== JSON.stringify(this.query.value.filter)) {
+      this.clearSelection();
+    }
+    this.query.next(query);
+  }
+
+  select(ranges: readonly (readonly [number, number])[], mode: 'replace' | 'add' | 'toggle'): void {
+    const ids = this.idsIn(ranges);
+    const next = new Set(mode === 'replace' ? [] : this.selection.value);
+    if (mode === 'toggle') {
+      const on = ids.some(id => !next.has(id));
+      for (const id of ids) on ? next.add(id) : next.delete(id);
+    } else {
+      for (const id of ids) next.add(id);
+    }
+    this.selection.next(next);
+  }
+
+  clearSelection(): void {
+    if (this.selection.value.size > 0) this.selection.next(new Set());
+  }
+
+  selectedIds(): string[] {
+    return [...this.selection.value];
+  }
+
+  updateSelected(patch: Partial<Issue>, label: string): void {
+    this.store.update(this.selectedIds(), patch, label);
+  }
+
+  addLabelToSelected(labelId: string, label: string): void {
+    const changes = this.selectedIds().flatMap(id => {
+      const issue = this.store.get(id);
+      if (issue === undefined || issue.labelIds.includes(labelId)) return [];
+      return [{ kind: 'update' as const, id, before: { labelIds: issue.labelIds }, after: { labelIds: [...issue.labelIds, labelId] } }];
+    });
+    if (changes.length > 0) this.store.commit(label, changes);
+  }
+
+  setWindow(range: { readonly start: number; readonly end: number }): void {
+    const current = this.range.value;
+    if (current.start !== range.start || current.end !== range.end) {
+      this.range.next({ start: range.start, end: range.end });
+    }
+  }
+
+  /** The IDs a selection of the current result covers, in order, without duplicates. */
+  idsIn(selection: readonly (readonly [number, number])[]): string[] {
+    const seen = new Set<string>();
+    for (const [from, to] of selection) {
+      const start = Math.max(0, Math.min(from, to));
+      const end = Math.min(this.last.ids.length - 1, Math.max(from, to));
+      for (let index = start; index <= end; index += 1) seen.add(this.last.ids[index]!);
+    }
+    return [...seen];
+  }
+
+  row(issue: Issue): IssueRow {
+    const user = issue.assigneeId === null ? undefined : this.names.users.get(issue.assigneeId);
+    return {
+      id: issue.id,
+      key: issue.key,
+      title: issue.title,
+      stateId: issue.stateId,
+      stateName: this.names.states.get(issue.stateId) ?? issue.stateId,
+      priority: issue.priority,
+      assigneeId: issue.assigneeId,
+      assigneeName: user?.name ?? '',
+      initials: user?.initials ?? '',
+      labels: issue.labelIds.map(id => this.names.labels.get(id) ?? id),
+      projectName: issue.projectId === null ? '' : (this.names.projects.get(issue.projectId) ?? ''),
+      updatedAt: issue.updatedAt
+    };
+  }
+}
