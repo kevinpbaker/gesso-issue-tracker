@@ -19,8 +19,11 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@types/mdast": "^4.0.4",
     "@types/node": "^26.6.4",
     "@webgpu/types": "^0.1.71",
+    "commonmark-spec": "^0.31.2",
+    "fast-check": "^4.10.2",
     "gesso-devtools": "^0.4.2",
     "gesso-testing": "^0.4.2",
     "gesso-vite-plugin": "^0.4.2",

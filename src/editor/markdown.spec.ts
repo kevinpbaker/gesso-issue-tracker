@@ -4,7 +4,7 @@ import { seedWorkspace } from '../model/seed';
 import { covers, inlineRuns } from './inline';
 import { block, inputRule, parse, serialize, type Block } from './markdown';
 
-const shape = (blocks: readonly Block[]) => blocks.map(({ id: _id, ...rest }) => rest);
+const shape = (blocks: readonly Block[]) => blocks.map(({ id: _id, src: _src, column: _column, ...rest }) => rest);
 
 describe('parse', () => {
   it('reads every supported block', () => {
@@ -17,7 +17,9 @@ describe('parse', () => {
         '',
         '- one',
         '  - nested',
+        '',
         '1. first',
+        '',
         '- [ ] open',
         '- [x] done',
         '',
@@ -30,19 +32,23 @@ describe('parse', () => {
         'const b = 2;',
         '```',
         '',
+        'Underlined',
+        '----------',
+        '',
         '---'
       ].join('\n')
     );
     expect(shape(blocks)).toEqual([
       { type: 'heading', text: 'Title', level: 1 },
       { type: 'paragraph', text: 'A paragraph\nwith a soft break.' },
-      { type: 'bullet', text: 'one', indent: 0 },
-      { type: 'bullet', text: 'nested', indent: 1 },
-      { type: 'ordered', text: 'first', indent: 0 },
-      { type: 'task', text: 'open', indent: 0, checked: false },
-      { type: 'task', text: 'done', indent: 0, checked: true },
+      { type: 'bullet', text: 'one', indent: 0, marker: '-' },
+      { type: 'bullet', text: 'nested', indent: 1, marker: '-' },
+      { type: 'ordered', text: 'first', indent: 0, marker: '.', ordinal: 1 },
+      { type: 'task', text: 'open', indent: 0, checked: false, marker: '-' },
+      { type: 'task', text: 'done', indent: 0, checked: true, marker: '-' },
       { type: 'quote', text: 'quoted\ntwice' },
       { type: 'code', text: 'const a = 1;\n\nconst b = 2;', lang: 'ts' },
+      { type: 'heading', text: 'Underlined', level: 2, setext: true },
       { type: 'rule', text: '' }
     ]);
   });
@@ -50,14 +56,38 @@ describe('parse', () => {
   it('keeps what it does not model, verbatim', () => {
     const table = '| a | b |\n| - | - |\n| 1 | 2 |';
     const html = '<details>\n<summary>More</summary>\n</details>';
-    const source = `Before\n\n${table}\n\n${html}\n\nAfter`;
+    const loose = '- one\n\n  still one\n- two';
+    const source = `Before\n\n${table}\n\n${html}\n\n${loose}\n\nAfter\n`;
     const blocks = parse(source);
-    expect(blocks.map(b => b.type)).toEqual(['paragraph', 'raw', 'raw', 'paragraph']);
+    expect(blocks.map(b => b.type)).toEqual(['paragraph', 'raw', 'raw', 'raw', 'bullet', 'paragraph']);
     expect(serialize(blocks)).toBe(source);
+  });
+
+  it("takes a list item's continuation indentation as layout, not text", () => {
+    const [item] = parse('10. a long\n    item');
+    expect(item).toMatchObject({ type: 'ordered', text: 'a long\nitem', ordinal: 10 });
   });
 });
 
 describe('serialize', () => {
+  it('writes an untouched document back byte for byte', () => {
+    const odd = '\n\n#  Spaced  #\n* star\n+ plus\n3) paren\n\n\n\npara\r\nwith CRLF\n___\n\n    indented code\n\n\n';
+    expect(serialize(parse(odd))).toBe(odd);
+  });
+
+  it('round-trips every seeded description exactly', () => {
+    for (const issue of seedWorkspace({ issues: 300 }).issues) {
+      expect(serialize(parse(issue.description))).toBe(issue.description);
+    }
+  });
+
+  it('rewrites only the block that changed', () => {
+    const source = '#  Spaced\n\n* star\n* other\n\nend\n';
+    const blocks = parse(source);
+    const edited = blocks.map(b => (b.text === 'other' ? { ...b, text: 'changed' } : b));
+    expect(serialize(edited)).toBe('#  Spaced\n\n* star\n* changed\n\nend\n');
+  });
+
   it('numbers ordered lists, restarting after an interruption', () => {
     const blocks = [
       block('ordered', 'a', { indent: 0 }),
@@ -67,19 +97,27 @@ describe('serialize', () => {
       block('paragraph', 'break'),
       block('ordered', 'again', { indent: 0 })
     ];
-    expect(serialize(blocks)).toBe('1. a\n2. b\n  1. b.1\n3. c\n\nbreak\n\n1. again');
+    // Nested under `2. `, an item is indented to the parent's text: three spaces.
+    expect(serialize(blocks)).toBe('1. a\n2. b\n   1. b.1\n3. c\n\nbreak\n\n1. again');
   });
 
-  it('round-trips every seeded description exactly', () => {
-    for (const issue of seedWorkspace({ issues: 300 }).issues) {
-      expect(serialize(parse(issue.description))).toBe(issue.description);
-    }
+  it('renumbers a numbered list around an insertion, but not one numbered by hand', () => {
+    const counted = parse('1. first\n2. second\n');
+    expect(serialize([counted[0]!, block('ordered', 'between', { indent: 0 }), counted[1]!])).toBe('1. first\n2. between\n3. second\n');
+    const same = parse('1. first\n1. second\n');
+    expect(serialize([same[0]!, block('ordered', 'between', { indent: 0 }), same[1]!])).toBe('1. first\n2. between\n1. second\n');
   });
 
-  it('is stable after one pass on loose input', () => {
-    const loose = '#  Spaced\n* star\n+ plus\n3) paren\n\n\n\npara\n___';
-    const once = serialize(parse(loose));
-    expect(serialize(parse(once))).toBe(once);
+  it('indents an item that moved deeper to its new parent', () => {
+    const [a, b] = parse('- a\n- b');
+    expect(serialize([a!, { ...b!, indent: 1 }])).toBe('- a\n  - b');
+  });
+
+  it('escapes text that would otherwise start a different block', () => {
+    const blocks = [block('paragraph', '# not a heading\n- not a list\n---'), block('paragraph', '1. not a list')];
+    const written = serialize(blocks);
+    expect(written).toBe('\\# not a heading\n\\- not a list\n\\---\n\n1\\. not a list');
+    expect(parse(written).map(b => b.type)).toEqual(['paragraph', 'paragraph']);
   });
 });
 
