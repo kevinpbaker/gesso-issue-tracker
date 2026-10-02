@@ -91,8 +91,17 @@ export function block(type: BlockType, text: string, extra: Partial<Omit<Block, 
 
 /** What a block means, for deciding whether it still matches its source. */
 export function meaning(b: Block): string {
-  return JSON.stringify([b.type, b.text, b.level, b.setext, b.indent, b.checked, b.marker, b.ordinal, b.lang, b.loose, b.spread]);
+  // Blocks are immutable, and a document is serialized on every edit:
+  // each block's meaning is worked out once.
+  let known = meanings.get(b);
+  if (known === undefined) {
+    known = JSON.stringify([b.type, b.text, b.level, b.setext, b.indent, b.checked, b.marker, b.ordinal, b.lang, b.loose, b.spread]);
+    meanings.set(b, known);
+  }
+  return known;
 }
+
+const meanings = new WeakMap<Block, string>();
 
 /** A block with its source forgotten, as if the editor had made it. */
 export function detached(b: Block): Block {
@@ -392,7 +401,8 @@ export function serialize(blocks: readonly Block[]): string {
     }
 
     if (verbatim) {
-      let text = current.src?.text ?? current.text;
+      // An edited raw block is written as its text: for raw, text is source.
+      let text = unchanged ? current.src!.text : current.text;
       if (current.type === 'ordered' && counters[at] !== current.ordinal) {
         text = text.replace(/^\d+/, String(counters[at]));
       }

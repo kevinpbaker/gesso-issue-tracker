@@ -60,9 +60,9 @@ export function Sidebar(_inputs: Inputs<{}>, ctx: ComponentContext) {
               ))
             )
           )}
-          <Section title="Phase 0 spikes" />
-          <NavItem label="Markdown editor" href="/spike/editor" />
-          <NavItem label="Editor, 5,000 lines" href="/spike/editor-5000" />
+          <Section title="Editor" />
+          <NavItem label="Sample document" href="/editor" />
+          <NavItem label="5,000 lines" href="/editor/long" />
         </column>
       </scrollview>
       <box padding={12}>

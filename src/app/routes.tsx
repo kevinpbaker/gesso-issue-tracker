@@ -3,8 +3,8 @@ import { createComponent, route, RouterOutlet, to, type ComponentContext, type I
 
 import { BoardRoute } from '../board/BoardRoute';
 import { IssueScreen } from '../detail/IssueScreen';
-import { bigDocument } from '../editor/bigDocument';
-import { EditorSpike } from '../editor/EditorSpike';
+import { bigDocument, SAMPLE } from '../editor/bigDocument';
+import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MyIssuesScreen, ProjectScreen, TeamIssuesScreen, ViewScreen } from '../issues/listScreens';
 import { AppShell } from './AppShell';
 
@@ -35,14 +35,16 @@ export const IssuePage = route({ path: '/issue/:key', component: IssueScreen, pa
 export const ProjectPage = route({ path: '/project/:id', component: ProjectScreen, parent: Shell });
 export const ViewPage = route({ path: '/view/:id', component: ViewScreen, parent: Shell });
 
-function EditorSpikeScreen(_inputs: Inputs<{}>, _ctx: ComponentContext) {
-  return <EditorSpike />;
+/** The editor on its own, beside the markdown it stores, until Phase 6 puts it in the issue page. */
+function EditorScreen(_inputs: Inputs<{}>, _ctx: ComponentContext) {
+  return <MarkdownEditor value={SAMPLE} showSource={true} label="Sample document" />;
 }
-function BigEditorSpikeScreen(_inputs: Inputs<{}>, _ctx: ComponentContext) {
-  return <EditorSpike markdown={bigDocument()} showSource={false} />;
+/** The Phase 5 exit criterion's document size. */
+function LongEditorScreen(_inputs: Inputs<{}>, _ctx: ComponentContext) {
+  return <MarkdownEditor value={bigDocument()} label="Long document" />;
 }
-export const EditorSpikePage = route({ path: '/spike/editor', component: EditorSpikeScreen, parent: Shell });
-export const BigEditorSpikePage = route({ path: '/spike/editor-5000', component: BigEditorSpikeScreen, parent: Shell });
+export const EditorPage = route({ path: '/editor', component: EditorScreen, parent: Shell });
+export const LongEditorPage = route({ path: '/editor/long', component: LongEditorScreen, parent: Shell });
 
 export const ROUTES = [
   Shell,
@@ -52,8 +54,8 @@ export const ROUTES = [
   IssuePage,
   ProjectPage,
   ViewPage,
-  EditorSpikePage,
-  BigEditorSpikePage
+  EditorPage,
+  LongEditorPage
 ];
 
 /**

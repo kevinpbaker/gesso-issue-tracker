@@ -19,7 +19,7 @@ Gesso feels at least as good as a DOM one, the "only good for exotic
 demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
-**Status:** Phases 0 to 4 are done.
+**Status:** Phases 0 to 4 are done, and Phase 5 is under way.
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -38,6 +38,17 @@ out precisely where and why.
   keyboard path for every drag: arrows or h/j/k/l to move a cursor,
   PageUp and PageDown between lanes, Space to pick up and drop, Escape
   to cancel. Each step is announced through a live region.
+- **Phase 5, so far:** the editor (`src/editor/MarkdownEditor.tsx`)
+  parses with micromark, so CommonMark is the parser's job, and keeps
+  every block's source: an untouched document saves byte for byte, and
+  an edit rewrites only the block it touched. That's checked on all 652
+  CommonMark examples (two divergences pinned by name) and by property
+  tests. It has one undo history for the whole document, in which a
+  markdown shortcut is its own step. It renders in chunks. In a
+  production build in Chrome, a keystroke in the 5,000-line document
+  takes 7.5 to 10 ms a frame and an Enter about 18 ms. Left: cross-block
+  selection, Mod+B/I/K, the slash menu, view source, paste and copy,
+  mentions as chips, and IME testing.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's

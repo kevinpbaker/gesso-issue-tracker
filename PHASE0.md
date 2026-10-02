@@ -99,7 +99,8 @@ rule for this project is no percentage sizes inside virtualized rows.
 `src/editor/`. One `<editabletext>` per block; markdown parsed into
 blocks on load and serialized on every edit; the stored markdown shown
 live beside it. Everything below is covered by
-`EditorSpike.spec.tsx`, driven through the keyboard in node, and was
+`EditorSpike.spec.tsx` (now `MarkdownEditor.spec.tsx`; the spike became
+the Phase 5 editor), driven through the keyboard in node, and was
 checked by hand in Chrome:
 
 - **Inline formatting while typing.** `<editabletext spans>` styles
@@ -153,8 +154,8 @@ The spike had a bug here worth recording. It tracked the caret from
 selection events, and a caret placed by a focus request raises none,
 so text typed in the same instant as an Enter landed in the wrong
 block. The fix is to read the caret from the field's model
-(`editorFor(node)`) at the moment of the key. The last spec in
-`EditorSpike.spec.tsx` pins it.
+(`editorFor(node)`) at the moment of the key. A spec in
+`MarkdownEditor.spec.tsx` pins it.
 
 ### 4.3 Typing cost grows with the document
 

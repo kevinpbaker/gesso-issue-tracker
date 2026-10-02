@@ -1,4 +1,4 @@
-/** Sample documents for the editor spike, with no framework import so a node script can use them. */
+/** Sample documents for the editor, with no framework import so a node script can use them. */
 
 export const SAMPLE = [
   '## Context',

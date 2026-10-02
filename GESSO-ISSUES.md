@@ -4,10 +4,10 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `1dfb6c2`. Not yet pushed or released. Every
+per fix, `2c572e3` through `acad77f`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passes with them: format,
-lint, types, 4,461 tests, build, API reports and the docs build.
+lint, types, 4,465 tests, build, API reports and the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -140,6 +140,40 @@ reached the switch. Preferences save and restore correctly.
 **Fix:** the mirror uses `overflow: clip`, which can't be scrolled.
 Spec: `SemanticsMirror.spec.ts`, "clips rather than hides overflow".
 
+### 8. A markdown parser killed the render worker on start
+
+**What:** importing micromark in the render worker failed with
+"document is not defined". Its `decode-named-character-reference`
+dependency has a browser build that uses the DOM, and Vite resolves
+every dependency with the `browser` condition.
+
+**Fix:** `gesso-vite-plugin` adds the `worker` condition ahead of
+Vite's defaults; packages like this list their worker build first.
+Spec: `vite-plugin/src/index.spec.ts`. Docs: the Vite plugin page.
+
+### 9. Inserting a block re-placed everything below it
+
+**What:** with the editor in chunks, typing re-measured a handful of
+nodes, but an Enter in the 5,000-line document still took 18 ms of
+layout. Boxes are absolute, so every block below the new one moved,
+and each was placed again all the way down: 9,572 nodes.
+
+**Fix:** a laid-out subtree that moves without changing size has its
+boxes shifted by the same amount instead of being placed again. An
+Enter now places 7 nodes. Spec: `LayoutEngine.budget.spec.ts`, "moves
+the rows below an inserted row without placing them again".
+
+### 10. The accessibility sweep visited every node on every layout
+
+**What:** after any layout, the runtime worked out every mirrored
+node's box to learn whether it was on screen: 4 to 24 ms of every
+keystroke with 2,868 fields.
+
+**Fix:** it walks down from the root and skips subtrees whose bounds
+are off screen. With the editor in chunks, that's the visible chunks.
+Spec: `GessoRuntime.semantics.spec.ts`, "looks only at what is on
+screen".
+
 ## Not a bug, now documented
 
 - **Undo in a multi-block editor.** `historyUndo` and `historyRedo`
@@ -165,6 +199,11 @@ Spec: `SemanticsMirror.spec.ts`, "clips rather than hides overflow".
      single-editable editor.
   2. A selection model that spans editables, built on the existing
      cross-node selection for static text.
+- **A structural change rebuilds the whole semantics tree.** Any frame
+  that adds or removes a child walks every node to rebuild the
+  accessibility tree. In the 5,000-line document that's about 11 ms of
+  an Enter's 18 ms in a production build. The scoped rebuild that text
+  changes already use would need to handle insertions and removals.
 - **Percentage widths going stale in lazy rows.** Seen once in Phase 0
   and never reproduced since. A percentage-width row asked the same
   question after a resize got its old width back, which is exactly the
