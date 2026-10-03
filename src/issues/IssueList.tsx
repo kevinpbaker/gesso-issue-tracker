@@ -1,7 +1,7 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { focusRing, interactive, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
+import { autoFocus, focusRing, interactive, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Button, Select } from 'gesso-components';
 import { formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
@@ -245,6 +245,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
   const list = LazyColumn(
     {
       flexGrow: 1,
+      flexBasis: 0,
       count: issues.view.summary.pipe(map(displayCount)),
       revision: issues.view.summary,
       estimatedExtent: ROW,
@@ -254,6 +255,9 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       // descendant, so a screen reader reads each as the cursor reaches it.
       label: 'Issues',
       role: 'listbox',
+      // Rows are selected as a set (x, Shift+J), not by moving the
+      // cursor: without this the row under it is announced as selected.
+      states: ['multiselectable'],
       focusable: true,
       activeDescendant: cursorRow,
       modifiers: [
@@ -264,7 +268,10 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
           }
         }),
         probe.modifier,
-        LIST_FOCUS
+        LIST_FOCUS,
+        // A screen opened is a screen to start in: focus goes to its list,
+        // not back to the top of the sidebar.
+        autoFocus()
       ]
     },
     position => {
@@ -318,7 +325,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       {issues.view.summary.pipe(
         map(summary =>
           summary.total === 0 && summary.groups.length === 0 ? (
-            <box key="empty" flexGrow={1} x="center" y="center">
+            <box key="empty" flexGrow={1} flexBasis={0} x="center" y="center">
               <text text={inputs.empty.pipe(map(text => text ?? 'No issues'))} fontSize={13} color="textMuted" />
             </box>
           ) : (
@@ -344,7 +351,8 @@ function Toolbar(
 ) {
   const issues = ctx.channel(Issues);
   return (
-    <row height={44} paddingLeft={16} paddingRight={16} gap={12} y="center">
+    // Wraps onto a second line rather than run its controls over each other.
+    <row minHeight={44} paddingLeft={16} paddingRight={16} paddingTop={6} paddingBottom={6} gap={12} y="center" flexWrap="wrap">
       <text
         text={issues.view.summary.pipe(
           map(summary => {
@@ -358,6 +366,8 @@ function Toolbar(
         )}
         fontSize={12}
         color="textMuted"
+        maxLines={1}
+        textOverflow="ellipsis"
         flexGrow={1}
       />
       <Select label="Group by" compact={true} value={inputs.group} options={GROUPS} onChange={next => inputs.onGroup.value(next as GroupField)} />
@@ -522,8 +532,10 @@ function BulkBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const apply = (patch: Parameters<typeof issues.send.updateSelected>[0]['patch'], describe: string) =>
     issues.send.updateSelected({ patch, label: `${describe} on ${plural(count.value)}` });
 
-  return (
-    <column visible={count.pipe(map(n => n > 0))} role="toolbar" label="Selected issues">
+  // Left out of the tree, not hidden: \`visible={false}\` keeps a node's
+  // space, and the list would end 53px above the window's edge.
+  const bar = () => (
+    <column key="bar" role="toolbar" label="Selected issues">
       <box height={1} backgroundColor="border" />
       <row height={52} paddingLeft={16} paddingRight={16} gap={10} y="center" backgroundColor="surface">
         <text text={count.pipe(map(n => `${plural(n)} selected`))} fontSize={13} fontWeight={600} color="text" flexGrow={1} />
@@ -569,4 +581,5 @@ function BulkBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
       </row>
     </column>
   );
+  return <column>{count.pipe(map(n => n > 0), distinctUntilChanged(), map(shown => (shown ? [bar()] : [])))}</column>;
 }

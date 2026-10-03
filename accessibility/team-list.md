@@ -71,28 +71,29 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | combobox | Add a filter | hasPopup=listbox, required=false | + Filter ▾ |
 | StaticText | + Filter |  |  |
 | StaticText | ▾ |  |  |
-| listbox | Issues | multiselectable=false, orientation=vertical, required=false, activedescendant=undefined |  |
+| listbox | Issues | focused=true, multiselectable=true, orientation=vertical, required=false, activedescendant=WEB-27 Refactor image uploads in the mobile layout, Backlog, Dev Patel |  |
 | button | Backlog, 2507 issues, expanded | expanded=true |  |
-| option | WEB-27 Refactor image uploads in the mobile layout, Backlog, Dev Patel | selected=false |  |
-| option | WEB-2520 Document image uploads when offline, Backlog, Jonas Berg | selected=false |  |
-| option | WEB-2552 Remove the onboarding checklist after a timezone change, Backlog | selected=false |  |
-| option | WEB-2563 Redesign search results paging, Backlog, Felix Wagner | selected=false |  |
-| option | WEB-2601 Test the settings page, Backlog, Kemi Adeyemi | selected=false |  |
-| option | WEB-2651 Redesign the login redirect for admins, Backlog, Ben Larsen | selected=false |  |
-| option | WEB-2654 Fix CSV import when offline, Backlog | selected=false |  |
-| option | WEB-28 Document the onboarding checklist for large workspaces, Backlog, Felix Wagner | selected=false |  |
-| option | WEB-291 Investigate search results paging when offline, Backlog, Luca Rossi | selected=false |  |
-| option | WEB-2768 Test team invitations after a timezone change, Backlog, Ada Okafor | selected=false |  |
-| option | WEB-2775 Remove dark mode contrast in the mobile layout, Backlog | selected=false |  |
-| option | WEB-2787 Fix CSV import, Backlog, Luca Rossi | selected=false |  |
-| option | WEB-2833 Investigate search results paging for large workspaces, Backlog, Kemi Adeyemi | selected=false |  |
-| option | WEB-2861 Remove CSV import for large workspaces, Backlog, Hiro Tanaka | selected=false |  |
-| option | WEB-2874 Migrate session timeout handling after a timezone change, Backlog, Luca Rossi | selected=false |  |
-| option | WEB-2943 Test the login redirect on Safari, Backlog, Luca Rossi | selected=false |  |
+| option | WEB-27 Refactor image uploads in the mobile layout, Backlog, Dev Patel |  |  |
+| option | WEB-2520 Document image uploads when offline, Backlog, Jonas Berg |  |  |
+| option | WEB-2552 Remove the onboarding checklist after a timezone change, Backlog |  |  |
+| option | WEB-2563 Redesign search results paging, Backlog, Felix Wagner |  |  |
+| option | WEB-2601 Test the settings page, Backlog, Kemi Adeyemi |  |  |
+| option | WEB-2651 Redesign the login redirect for admins, Backlog, Ben Larsen |  |  |
+| option | WEB-2654 Fix CSV import when offline, Backlog |  |  |
+| option | WEB-28 Document the onboarding checklist for large workspaces, Backlog, Felix Wagner |  |  |
+| option | WEB-291 Investigate search results paging when offline, Backlog, Luca Rossi |  |  |
+| option | WEB-2768 Test team invitations after a timezone change, Backlog, Ada Okafor |  |  |
+| option | WEB-2775 Remove dark mode contrast in the mobile layout, Backlog |  |  |
+| option | WEB-2787 Fix CSV import, Backlog, Luca Rossi |  |  |
+| option | WEB-2833 Investigate search results paging for large workspaces, Backlog, Kemi Adeyemi |  |  |
+| option | WEB-2861 Remove CSV import for large workspaces, Backlog, Hiro Tanaka |  |  |
+| option | WEB-2874 Migrate session timeout handling after a timezone change, Backlog, Luca Rossi |  |  |
+| option | WEB-2943 Test the login redirect on Safari, Backlog, Luca Rossi |  |  |
+| option | WEB-2948 Redesign dark mode contrast after a timezone change, Backlog, Luca Rossi |  |  |
 
 ## Controls
 
-56 controls (button, radio, textbox, combobox, option), every one of them named.
+57 controls (button, radio, textbox, combobox, option), every one of them named.
 
 ## Tab order
 

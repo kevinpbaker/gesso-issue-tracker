@@ -47,7 +47,8 @@ export function placeOf(
   return { title: '', team: null, view: null };
 }
 
-export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
+/** `menu` is true while the sidebar isn't beside the page: a Menu button then opens it. */
+export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, ctx: ComponentContext) {
   const router = ctx.inject(RouterService);
   const meta = ctx.channel(WorkspaceMeta);
   const issues = ctx.channel(Issues);
@@ -61,8 +62,21 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
 
   return (
     <row height={48} paddingLeft={16} paddingRight={12} gap={12} y="center" x="space-between" role="banner" label="Top bar">
-      <text text={place.pipe(map(p => p.title))} fontSize={14} fontWeight={600} color="text" maxLines={1} flexShrink={1} />
-      <row gap={8} y="center">
+      <row gap={8} y="center" flexShrink={1} minWidth={0}>
+        {inputs.menu.pipe(
+          map(menu =>
+            menu === true
+              ? [
+                  <Button key="menu" label="Menu" description={'Mod+\\'} size="small" variant="plain" flexShrink={0} onClick={() => inputs.onMenu.value?.()}>
+                    <text text="Menu" fontSize={12} color="text" />
+                  </Button>
+                ]
+              : []
+          )
+        )}
+        <text text={place.pipe(map(p => p.title))} fontSize={14} fontWeight={600} color="text" maxLines={1} textOverflow="ellipsis" flexShrink={1} />
+      </row>
+      <row gap={8} y="center" flexShrink={0}>
         {/* One switcher whose value follows the url, hidden off team pages, rather than a new one per team. */}
         <box visible={place.pipe(map(p => p.team !== null))}>
           <SegmentedControl

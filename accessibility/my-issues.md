@@ -68,28 +68,29 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | combobox | Add a filter | hasPopup=listbox, required=false | + Filter ▾ |
 | StaticText | + Filter |  |  |
 | StaticText | ▾ |  |  |
-| listbox | Issues | multiselectable=false, orientation=vertical, required=false, activedescendant=undefined |  |
+| listbox | Issues | focused=true, multiselectable=true, orientation=vertical, required=false, activedescendant=API-2492 Refactor the onboarding checklist on Safari, Todo, Ada Okafor |  |
 | button | Todo, 733 issues, expanded | expanded=true |  |
-| option | API-2492 Refactor the onboarding checklist on Safari, Todo, Ada Okafor | selected=false |  |
-| option | API-2534 Add the billing dashboard on Safari, Todo, Ada Okafor | selected=false |  |
-| option | OPS-2677 Remove the billing dashboard for large workspaces, Todo, Ada Okafor | selected=false |  |
-| option | WEB-2783 Investigate the audit log on Safari, Todo, Ada Okafor | selected=false |  |
-| option | WEB-2816 Fix the settings page for large workspaces, Todo, Ada Okafor | selected=false |  |
-| option | OPS-2996 Migrate the audit log, Todo, Ada Okafor | selected=false |  |
-| option | WEB-3076 Refactor keyboard shortcuts after a timezone change, Todo, Ada Okafor | selected=false |  |
-| option | OPS-3197 Remove dark mode contrast for admins, Todo, Ada Okafor | selected=false |  |
-| option | MOB-3448 Redesign the audit log on Safari, Todo, Ada Okafor | selected=false |  |
-| option | WEB-3657 Refactor the audit log for admins, Todo, Ada Okafor | selected=false |  |
-| option | API-3745 Remove CSV import for large workspaces, Todo, Ada Okafor | selected=false |  |
-| option | API-3891 Investigate the settings page on Safari, Todo, Ada Okafor | selected=false |  |
-| option | OPS-3982 Redesign rate limiting in the mobile layout, Todo, Ada Okafor | selected=false |  |
-| option | API-4054 Test the audit log after a timezone change, Todo, Ada Okafor | selected=false |  |
-| option | API-4087 Add image uploads in the mobile layout, Todo, Ada Okafor | selected=false |  |
-| option | API-4118 Document invoice PDF export for large workspaces, Todo, Ada Okafor | selected=false |  |
+| option | API-2492 Refactor the onboarding checklist on Safari, Todo, Ada Okafor |  |  |
+| option | API-2534 Add the billing dashboard on Safari, Todo, Ada Okafor |  |  |
+| option | OPS-2677 Remove the billing dashboard for large workspaces, Todo, Ada Okafor |  |  |
+| option | WEB-2783 Investigate the audit log on Safari, Todo, Ada Okafor |  |  |
+| option | WEB-2816 Fix the settings page for large workspaces, Todo, Ada Okafor |  |  |
+| option | OPS-2996 Migrate the audit log, Todo, Ada Okafor |  |  |
+| option | WEB-3076 Refactor keyboard shortcuts after a timezone change, Todo, Ada Okafor |  |  |
+| option | OPS-3197 Remove dark mode contrast for admins, Todo, Ada Okafor |  |  |
+| option | MOB-3448 Redesign the audit log on Safari, Todo, Ada Okafor |  |  |
+| option | WEB-3657 Refactor the audit log for admins, Todo, Ada Okafor |  |  |
+| option | API-3745 Remove CSV import for large workspaces, Todo, Ada Okafor |  |  |
+| option | API-3891 Investigate the settings page on Safari, Todo, Ada Okafor |  |  |
+| option | OPS-3982 Redesign rate limiting in the mobile layout, Todo, Ada Okafor |  |  |
+| option | API-4054 Test the audit log after a timezone change, Todo, Ada Okafor |  |  |
+| option | API-4087 Add image uploads in the mobile layout, Todo, Ada Okafor |  |  |
+| option | API-4118 Document invoice PDF export for large workspaces, Todo, Ada Okafor |  |  |
+| option | MOB-4435 Redesign image uploads for large workspaces, Todo, Ada Okafor |  |  |
 
 ## Controls
 
-54 controls (button, radio, textbox, combobox, option), every one of them named.
+55 controls (button, radio, textbox, combobox, option), every one of them named.
 
 ## Tab order
 

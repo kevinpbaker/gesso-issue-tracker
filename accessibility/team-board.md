@@ -62,7 +62,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | ▾ |  |  |
 | status | Board announcements | live=polite, atomic=true, relevant=additions text |  |
 | StaticText | Board announcements |  |  |
-| group | Board |  |  |
+| group | Board | focused=true, activedescendant=WEB-5 Remove webhook retries on Safari |  |
 | StaticText | Backlog |  |  |
 | StaticText | 2,507 |  |  |
 | StaticText | Todo |  |  |

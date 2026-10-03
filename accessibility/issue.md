@@ -52,7 +52,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | WEB-12 |  |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
-| region | WEB-12 Add the login redirect for admins |  |  |
+| region | WEB-12 Add the login redirect for admins | focused=true |  |
 | StaticText | Web |  |  |
 | StaticText | › |  |  |
 | StaticText | WEB-12 |  |  |

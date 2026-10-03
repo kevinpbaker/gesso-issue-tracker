@@ -184,6 +184,15 @@ describe('the issue page', () => {
     expect(h.ui.getByText(child!.title)).toBeDefined();
   });
 
+  it('starts focus on the issue, and Tab goes on to its title', async () => {
+    await mount(fresh(), 'WEB-12');
+    const region = h.ui.runtime.input.focus.focusedNode!;
+    expect(h.ui.getSemantics(region)).toMatchObject({ role: 'region' });
+    expect(h.ui.getSemantics(region).label).toMatch(/^WEB-12 /);
+    await press('Tab');
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(h.ui.getByRole('textbox', { name: 'Title' }));
+  });
+
   it('says so when no issue has the key', async () => {
     await mount(fresh(), 'NOPE-1');
     expect(h.ui.getByText('No issue has that key.')).toBeDefined();

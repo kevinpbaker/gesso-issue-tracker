@@ -1,8 +1,9 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { percent, type UiChild } from 'gesso-core';
-import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
+import { autoFocus, breakpoint, percent, type UiChild } from 'gesso-core';
+
+import { NARROW } from '../app/AppShell';import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
 import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { routeParam } from '../app/params';
@@ -115,8 +116,31 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   ctx.onUnmount(flush);
 
   return (
-    <row gap={32} padding={32} y="start" width={percent(100)}>
-      <column flexGrow={1} flexShrink={1} minWidth={0} gap={20} maxWidth={780} role="region" label={issue.pipe(map(i => `${i.key} ${i.title}`))}>
+    // Wraps rather than squeezes: below about 670 px the properties go
+    // under the issue, which is what a phone, or a window zoomed past
+    // 200%, needs. The narrow band's spacing is the declared one.
+    <row
+      gap={16}
+      padding={16}
+      y="start"
+      flexWrap="wrap"
+      width={percent(100)}
+      modifiers={[breakpoint({ at: [NARROW], props: { 0: { gap: 16, padding: 16 }, [NARROW]: { gap: 32, padding: 32 } } })]}>
+      {/* Focus starts here when the issue opens: a screen reader reads the
+          issue, single-letter shortcuts still work (it isn't a field), and
+          Tab goes on to the title. Not a stop of its own. */}
+      <column
+        flexGrow={1}
+        flexShrink={1}
+        flexBasis={360}
+        minWidth={0}
+        gap={20}
+        maxWidth={780}
+        role="region"
+        label={issue.pipe(map(i => `${i.key} ${i.title}`))}
+        focusable={true}
+        tabStop={false}
+        modifiers={[autoFocus()]}>
         <Breadcrumbs detail={detail} open={open} />
         <TitleField issue={issue} onSave={title => update({ title }, 'Renamed')} />
         {outside.pipe(

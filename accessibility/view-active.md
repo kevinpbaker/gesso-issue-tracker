@@ -68,28 +68,29 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | combobox | Add a filter | hasPopup=listbox, required=false | + Filter ▾ |
 | StaticText | + Filter |  |  |
 | StaticText | ▾ |  |  |
-| listbox | Issues | multiselectable=false, orientation=vertical, required=false, activedescendant=undefined |  |
+| listbox | Issues | focused=true, multiselectable=true, orientation=vertical, required=false, activedescendant=MOB-2568 Fix notification batching on slow connections, In Review, Ada Okafor |  |
 | button | Ada Okafor, 1410 issues, expanded | expanded=true |  |
-| option | MOB-2568 Fix notification batching on slow connections, In Review, Ada Okafor | selected=false |  |
-| option | WEB-2667 Remove rate limiting for admins, In Progress, Ada Okafor | selected=false |  |
-| option | OPS-2730 Remove session timeout handling in the mobile layout, In Review, Ada Okafor | selected=false |  |
-| option | WEB-289 Fix invoice PDF export on slow connections, In Review, Ada Okafor | selected=false |  |
-| option | API-2784 Migrate team invitations for large workspaces, In Review, Ada Okafor | selected=false |  |
-| option | WEB-2842 Investigate search results paging for admins, In Progress, Ada Okafor | selected=false |  |
-| option | API-2865 Refactor keyboard shortcuts for admins, In Review, Ada Okafor | selected=false |  |
-| option | OPS-3063 Add the onboarding checklist on slow connections, In Progress, Ada Okafor | selected=false |  |
-| option | OPS-3095 Speed up notification batching in the mobile layout, In Review, Ada Okafor | selected=false |  |
-| option | MOB-3229 Test invoice PDF export when offline, In Review, Ada Okafor | selected=false |  |
-| option | WEB-3160 Speed up rate limiting after a timezone change, In Review, Ada Okafor | selected=false |  |
-| option | MOB-3280 Add rate limiting on slow connections, In Progress, Ada Okafor | selected=false |  |
-| option | OPS-3224 Investigate CSV import on Safari, In Progress, Ada Okafor | selected=false |  |
-| option | API-3186 Remove the billing dashboard, In Progress, Ada Okafor | selected=false |  |
-| option | OPS-3240 Investigate team invitations for admins, In Progress, Ada Okafor | selected=false |  |
-| option | WEB-3269 Refactor rate limiting after a timezone change, In Progress, Ada Okafor | selected=false |  |
+| option | MOB-2568 Fix notification batching on slow connections, In Review, Ada Okafor |  |  |
+| option | WEB-2667 Remove rate limiting for admins, In Progress, Ada Okafor |  |  |
+| option | OPS-2730 Remove session timeout handling in the mobile layout, In Review, Ada Okafor |  |  |
+| option | WEB-289 Fix invoice PDF export on slow connections, In Review, Ada Okafor |  |  |
+| option | API-2784 Migrate team invitations for large workspaces, In Review, Ada Okafor |  |  |
+| option | WEB-2842 Investigate search results paging for admins, In Progress, Ada Okafor |  |  |
+| option | API-2865 Refactor keyboard shortcuts for admins, In Review, Ada Okafor |  |  |
+| option | OPS-3063 Add the onboarding checklist on slow connections, In Progress, Ada Okafor |  |  |
+| option | OPS-3095 Speed up notification batching in the mobile layout, In Review, Ada Okafor |  |  |
+| option | MOB-3229 Test invoice PDF export when offline, In Review, Ada Okafor |  |  |
+| option | WEB-3160 Speed up rate limiting after a timezone change, In Review, Ada Okafor |  |  |
+| option | MOB-3280 Add rate limiting on slow connections, In Progress, Ada Okafor |  |  |
+| option | OPS-3224 Investigate CSV import on Safari, In Progress, Ada Okafor |  |  |
+| option | API-3186 Remove the billing dashboard, In Progress, Ada Okafor |  |  |
+| option | OPS-3240 Investigate team invitations for admins, In Progress, Ada Okafor |  |  |
+| option | WEB-3269 Refactor rate limiting after a timezone change, In Progress, Ada Okafor |  |  |
+| option | MOB-3380 Remove dark mode contrast in the mobile layout, In Progress, Ada Okafor |  |  |
 
 ## Controls
 
-54 controls (button, radio, textbox, combobox, option), every one of them named.
+55 controls (button, radio, textbox, combobox, option), every one of them named.
 
 ## Tab order
 

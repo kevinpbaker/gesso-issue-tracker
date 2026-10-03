@@ -1,7 +1,7 @@
-import { combineLatest, type Observable } from 'rxjs';
+import { BehaviorSubject, combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { darkTheme, lightTheme, percent, shortcut, shortcuts, type UiChild } from 'gesso-core';
+import { darkTheme, lightTheme, percent, Responsive, shortcut, shortcuts, withContrast, type UiChild } from 'gesso-core';
 import { SegmentedControl, SplitPane } from 'gesso-components';
 import { RouterService, ShellService, type ComponentContext, type Inputs, type OutletProps } from 'gesso-framework';
 
@@ -80,21 +80,37 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
       ];
     })
   );
-  const theme = resolveTheme(prefs.view.theme, shell.colorScheme).pipe(map(scheme => (scheme === 'dark' ? darkTheme : lightTheme)));
+  // A canvas gets nothing from forced colours, so a person who asked the
+  // system for more contrast gets the raised palette from here.
+  const theme = combineLatest([resolveTheme(prefs.view.theme, shell.colorScheme), shell.contrast]).pipe(
+    map(([scheme, contrast]) => withContrast(scheme === 'dark' ? darkTheme : lightTheme, contrast))
+  );
 
   const global = (keys: string, label: string, run: () => void) => shortcut({ registry, keys, label, scoped: false, run });
+
+  // Below NARROW (a phone, or a window zoomed to 200% and more) there is
+  // no room for the sidebar beside the page, so it takes the page's
+  // place while it's open, from the top bar's Menu button, and closes
+  // when a destination is chosen.
+  const narrowNow = new BehaviorSubject(false);
+  let narrow = false;
+  const drawer = new BehaviorSubject(false);
+  ctx.effect(router.url, () => drawer.next(false));
+  const closeDrawer = () => drawer.next(false);
 
   const main = (
     // minWidth 0: without it a board five columns wide sets the pane's
     // minimum, and the pane pushes the top bar's controls off screen.
     <column flexGrow={1} minWidth={0} width={percent(100)} height={percent(100)} x="stretch" role="main" label="Main">
-      <TopBar />
+      <TopBar menu={narrowNow} onMenu={() => drawer.next(true)} />
       <NewIssueDialog open={newIssue.open} onClose={() => (newIssue.open.value = false)} />
       <CommandPalette />
       <box height={1} backgroundColor="border" />
       {/* minHeight 0 too: without it a page taller than the window sets the
-          box's minimum height, and the page's own scroll view never scrolls. */}
-      <box flexGrow={1} minWidth={0} minHeight={0} x="stretch" y="stretch">
+          box's minimum height, and the page's own scroll view never scrolls.
+          And a basis of 0, so the page's content isn't what the column
+          shares out: with it, a long list squeezed the top bar. */}
+      <box flexGrow={1} flexBasis={0} minWidth={0} minHeight={0} x="stretch" y="stretch">
         {inputs.outlet as UiChild}
       </box>
     </column>
@@ -112,35 +128,63 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         shortcuts({ registry }),
         global('Mod+Z', 'Undo', () => issues.send.undo()),
         global('Mod+Shift+Z', 'Redo', () => issues.send.redo()),
-        global('Mod+\\', 'Show or hide the sidebar', () => prefs.send.setSidebarOpen(!prefs.view.sidebarOpen.value)),
+        global('Mod+\\', 'Show or hide the sidebar', () =>
+          narrow ? drawer.next(!drawer.value) : prefs.send.setSidebarOpen(!prefs.view.sidebarOpen.value)
+        ),
         global('g m', 'Go to my issues', () => router.navigate('/my-issues')),
         global('g l', 'Go to the list', () => router.navigate(`/team/${currentTeam(router)}/list`)),
         global('g b', 'Go to the board', () => router.navigate(`/team/${currentTeam(router)}/board`)),
-        global('c', 'New issue', () => (newIssue.open.value = true)),
-        global('Mod+K', 'Open the command palette', () => (palette.open.value = !palette.open.value))
+        // Both open over the page, so a sidebar standing in for it closes first.
+        global('c', 'New issue', () => {
+          closeDrawer();
+          newIssue.open.value = true;
+        }),
+        global('Mod+K', 'Open the command palette', () => {
+          closeDrawer();
+          palette.open.value = !palette.open.value;
+        })
       ]}>
-      {prefs.view.sidebarOpen.pipe(
-        map(open =>
-          open ? (
-            <SplitPane
-              key="split"
-              flexGrow={1}
-              label="Sidebar"
-              split={prefs.view.sidebarSplit}
-              onSplitChange={split => prefs.send.setSidebarSplit(split)}
-              min={0.12}
-              max={0.4}
-              first={<Sidebar />}
-              second={main}
-            />
-          ) : (
-            main
-          )
-        )
-      )}
+      {Responsive({ at: [NARROW], as: 'row', flexGrow: 1, flexBasis: 0, minWidth: 0, y: 'stretch' }, size => {
+        narrow = size.width < NARROW;
+        narrowNow.next(narrow);
+        if (narrow) {
+          return (
+            <row key="narrow" flexGrow={1} minWidth={0} y="stretch">
+              {drawer.pipe(map(open => (open ? <Sidebar key="drawer" onClose={closeDrawer} /> : main)))}
+            </row>
+          );
+        }
+        closeDrawer();
+        return (
+          <row key="wide" flexGrow={1} minWidth={0} y="stretch">
+            {prefs.view.sidebarOpen.pipe(
+              map(open =>
+                open ? (
+                  <SplitPane
+                    key="split"
+                    flexGrow={1}
+                    label="Sidebar"
+                    split={prefs.view.sidebarSplit}
+                    onSplitChange={split => prefs.send.setSidebarSplit(split)}
+                    min={0.12}
+                    max={0.4}
+                    first={<Sidebar />}
+                    second={main}
+                  />
+                ) : (
+                  main
+                )
+              )
+            )}
+          </row>
+        );
+      })}
     </row>
   );
 }
+
+/** The width, in CSS pixels, below which the sidebar stops sitting beside the page. */
+export const NARROW = 720;
 
 /** The team in the url, or the Web team when the url names none. */
 export function currentTeam(router: RouterService): string {

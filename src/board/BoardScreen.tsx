@@ -1,9 +1,9 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { dragSource, draggable, dropTarget, focusRing, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
+import { autoFocus, dragSource, draggable, dropTarget, focusRing, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Select } from 'gesso-components';
-import { internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { ShortcutsService } from '../app/ShortcutsService';
 import { Probe } from '../ui/probe';
@@ -94,6 +94,16 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
     cards: new Map(),
     cardsChanged: internalState(0)
   };
+  // The board takes focus as it opens, often before its cards arrive:
+  // the cursor goes to the first card when the board has focus and the
+  // cards are there, whichever came second.
+  const focus = ctx.inject(FocusService);
+  let boardNode: UiNode | null = null;
+  ctx.effect(combineLatest([focus.focused, board.view.lanes]), ([focused]) => {
+    if (focused !== null && focused === boardNode && state.cursor.value === null) {
+      state.cursor.value = first();
+    }
+  });
   // The card under the cursor, which a screen reader reads as the board's focus.
   const cursorCard = combineLatest([state.cursor, state.cardsChanged]).pipe(
     map(([at]) => (at === null ? null : (state.cards.get(slotKey(at.lane, at.stateId, at.index)) ?? null))),
@@ -238,6 +248,7 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
       <row
         overflow="scroll"
         flexGrow={1}
+        flexBasis={0}
         minWidth={0}
         width={percent(100)}
         label="Board"
@@ -245,10 +256,9 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
         description={BOARD_KEYS}
         focusable={true}
         activeDescendant={cursorCard}
-        modifiers={[BOARD_FOCUS]}
-        onFocus={() => {
-          if (state.cursor.value === null) state.cursor.value = first();
-        }}>
+        // The board opened is the board to start on.
+        modifiers={[BOARD_FOCUS, autoFocus()]}
+        ref={(node: UiNode | null) => (boardNode = node)}>
         <column padding={12} paddingTop={0} gap={8}>
           <row gap={12}>
             {board.view.columns.pipe(
@@ -277,7 +287,7 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
               field === 'none' ? (
                 <LaneCells key="flat" lane={ALL_LANE} height={null} state={state} />
               ) : (
-                <scrollview key={`lanes-${field}`} flexGrow={1} label="Swimlanes">
+                <scrollview key={`lanes-${field}`} flexGrow={1} flexBasis={0} label="Swimlanes">
                   <column gap={16}>
                     {board.view.lanes.pipe(map(all => all.map(lane => <Lane key={lane.key} lane={lane} state={state} />)))}
                   </column>

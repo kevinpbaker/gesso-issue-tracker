@@ -123,6 +123,10 @@ describe('the issue list from the keyboard', () => {
   it('is one tab stop whose cursor and selection a screen reader hears', async () => {
     await mount();
     const list = h.ui.getByRole('listbox', { name: 'Issues' });
+    // A list opened is where focus starts.
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(list);
+    // Its selection is a set, so the row under the cursor isn't selected by being there.
+    expect(h.ui.getSemantics(list).states).toContain('multiselectable');
     // The cursor is the listbox's active descendant, and moves with it.
     const active = () => h.ui.getSemantics(list).activeDescendant;
     const first = active();
