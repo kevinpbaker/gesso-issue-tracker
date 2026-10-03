@@ -323,7 +323,13 @@ function keyBudget(what: string, recorded: readonly ProofFrame[], failures: stri
     return;
   }
   const p95 = percentile(latencies, 0.95);
-  console.log(`  ${what}: ${latencies.length} keys · median ${percentile(latencies, 0.5).toFixed(2)}ms · p95 ${p95.toFixed(2)}ms · worst ${latencies.at(-1)!.toFixed(2)}ms`);
+  // The frames' own work beside it: what's left of the latency is the
+  // wait for the frame to start.
+  const work = recorded.filter(frame => frame.inputLatencyMs !== null).map(frame => frame.durationMs).sort((a, b) => a - b);
+  console.log(
+    `  ${what}: ${latencies.length} keys · median ${percentile(latencies, 0.5).toFixed(2)}ms · p95 ${p95.toFixed(2)}ms · worst ${latencies.at(-1)!.toFixed(2)}ms` +
+      ` (the frame's work: median ${percentile(work, 0.5).toFixed(2)}ms, p95 ${percentile(work, 0.95).toFixed(2)}ms)`
+  );
   check(failures, `${what}: p95 keypress to glyph ${p95.toFixed(2)}ms`, p95 <= BUDGET.keyToGlyphP95Ms, BUDGET.keyToGlyphP95Ms);
 }
 

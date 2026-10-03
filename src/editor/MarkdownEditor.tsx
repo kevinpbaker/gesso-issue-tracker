@@ -1,5 +1,5 @@
-import { Subject, type Observable } from 'rxjs';
-import { distinctUntilChanged, filter, map, shareReplay, startWith } from 'rxjs/operators';
+import { BehaviorSubject, type Observable } from 'rxjs';
+import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
 
 import {
   defineModifier,
@@ -95,11 +95,33 @@ interface FocusRequest {
  */
 class FocusRequests {
   private pending: FocusRequest | null = null;
-  readonly stream = new Subject<FocusRequest>();
+  /**
+   * Who to tell, by block. One stream every field filtered for its own
+   * ID offered each request to every field in the document.
+   */
+  private readonly listeners = new Map<string, Set<() => void>>();
 
   send(id: string, caret: number, anchor?: number): void {
     this.pending = anchor === undefined ? { id, caret } : { id, caret, anchor };
-    this.stream.next(this.pending);
+    for (const listener of [...(this.listeners.get(id) ?? [])]) {
+      listener();
+    }
+  }
+
+  /** Hears the requests sent to one block, until the returned function is called. */
+  listen(id: string, listener: () => void): () => void {
+    let set = this.listeners.get(id);
+    if (set === undefined) {
+      set = new Set();
+      this.listeners.set(id, set);
+    }
+    set.add(listener);
+    return () => {
+      set.delete(listener);
+      if (set.size === 0 && this.listeners.get(id) === set) {
+        this.listeners.delete(id);
+      }
+    };
   }
 
   /** Called by the block that took it, so a later attach does not take it again. */
@@ -138,8 +160,7 @@ const focusRequests = defineModifier<{ id: string; requests: FocusRequests; fiel
       model.select(Math.min(request.anchor ?? caret, model.text.length), caret);
     };
     apply();
-    const subscription = args.requests.stream.pipe(filter(request => request.id === args.id)).subscribe(apply);
-    host.own(() => subscription.unsubscribe());
+    host.own(args.requests.listen(args.id, apply));
   }
 });
 
@@ -223,7 +244,17 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
   // and a view mounted by one (a chunk re-rendering) read another that
   // hadn't caught up: a block that had just become a heading mounted
   // holding the paragraph it was.
+  //
+  // Each block's view reads its own cell, and a new state updates only
+  // the cells whose block or number changed. Every block's view mapping
+  // the whole state to its own entry ran one pipeline per block per
+  // keystroke: in 5,000 lines, ten thousand callbacks to find the one
+  // block that changed. The cells are updated here, as the state is
+  // made, so a view a chunk mounts afterwards finds its cell current.
   let starts = new Set<string>();
+  const cells = new Map<string, BehaviorSubject<Block>>();
+  const numberCells = new Map<string, BehaviorSubject<number>>();
+  let numbersNow = new Map<string, number>();
   const snapshot = blocks.pipe(
     map(list => {
       const byId = new Map(list.map(b => [b.id, b]));
@@ -231,22 +262,40 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const cut = chunk(list, starts);
       starts = new Set(cut.keys());
       const chunks = new Map([...cut].map(([start, ids]) => [start, ids.map(id => byId.get(id)!)]));
-      return { byId, chunks, numbers: numbering(list) };
+      numbersNow = numbering(list);
+      for (const [id, cell] of cells) {
+        const block = byId.get(id);
+        if (block === undefined) cells.delete(id);
+        else if (block !== cell.value) cell.next(block);
+      }
+      for (const [id, cell] of numberCells) {
+        const number = numbersNow.get(id) ?? 1;
+        if (!byId.has(id)) numberCells.delete(id);
+        else if (number !== cell.value) cell.next(number);
+      }
+      return { byId, chunks, numbers: numbersNow };
     }),
     shareReplay({ bufferSize: 1, refCount: true })
   );
-  const cellFor = (current: Block) =>
-    snapshot.pipe(
-      map(state => state.byId.get(current.id)),
-      filter((b): b is Block => b !== undefined),
-      startWith(current),
-      distinctUntilChanged()
-    );
-  const numberOf = (id: string) =>
-    snapshot.pipe(
-      map(state => state.numbers.get(id) ?? 1),
-      distinctUntilChanged()
-    );
+  const cellFor = (current: Block): Observable<Block> => {
+    let cell = cells.get(current.id);
+    if (cell === undefined) {
+      cell = new BehaviorSubject(current);
+      cells.set(current.id, cell);
+    } else if (cell.value !== current) {
+      // A view mounted from the latest state: its block is the newest.
+      cell.next(current);
+    }
+    return cell;
+  };
+  const numberOf = (id: string): Observable<number> => {
+    let cell = numberCells.get(id);
+    if (cell === undefined) {
+      cell = new BehaviorSubject(numbersNow.get(id) ?? 1);
+      numberCells.set(id, cell);
+    }
+    return cell;
+  };
   const chunks = snapshot.pipe(map(state => state.chunks));
   const chunkKeys = chunks.pipe(
     map(cut => [...cut.keys()].join('|')),
