@@ -119,7 +119,10 @@ describe('the board from the keyboard', () => {
   it('exposes the announcements as a status a screen reader hears', async () => {
     await mount();
     await press('ArrowDown');
-    expect(h.ui.getByRole('status')).toBeTruthy();
+    // What's read out is the announcement itself: a live region speaks
+    // its name, so a fixed label would be all anyone ever heard.
+    expect(h.ui.getSemantics(h.ui.getByRole('status')).label).toBe(said());
+    expect(said()).toMatch(/Backlog, 2 of \d+$/);
   });
 });
 

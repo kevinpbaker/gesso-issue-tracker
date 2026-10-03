@@ -265,7 +265,9 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
           onChange={next => board.send.setLanes(next as LaneField)}
         />
       </row>
-      <text text={announcement} role="status" live="polite" label="Board announcements" height={0} opacity={0} />
+      {/* No label: a live region speaks its name, and named here it would
+          say "Board announcements" every time rather than what happened. */}
+      <text text={announcement} role="status" live="polite" height={0} opacity={0} />
       {triage.picker}
       {/* A row that overflows scrolls sideways, so five columns fit any width. */}
       {/* One tab stop: the cards are walked with the cursor, and the one
