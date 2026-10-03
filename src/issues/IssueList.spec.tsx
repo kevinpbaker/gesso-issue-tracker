@@ -120,10 +120,27 @@ describe('the issue list from the keyboard', () => {
     expect([...h.store.issues()].some(issue => issue.priority !== 2)).toBe(true);
   });
 
-  it('draws the cursor and selection as states a screen reader hears', async () => {
+  it('is one tab stop whose cursor and selection a screen reader hears', async () => {
     await mount();
+    const list = h.ui.getByRole('listbox', { name: 'Issues' });
+    // The cursor is the listbox's active descendant, and moves with it.
+    const active = () => h.ui.getSemantics(list).activeDescendant;
+    const first = active();
+    expect(first).toBeDefined();
+    await press('j');
+    expect(active()).not.toBe(first);
     await press('x');
-    expect(h.ui.getAllByRole('button', { states: ['selected'] }).length).toBeGreaterThanOrEqual(1);
+    const selected = h.ui.getAllByRole('option', { states: ['selected'] });
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.id).toBe(active());
+    expect(h.ui.getSemantics(selected[0]!)).toMatchObject({ posInSet: 2, setSize: 400 });
+    // Nothing in a row is a tab stop of its own: Tab from the list leaves it.
+    h.ui.fireEvent.focus(list);
+    await press('Tab');
+    const after = h.ui.runtime.input.focus.focusedNode;
+    let inside = false;
+    for (let at = after; at !== null; at = at.parent) if (at === list) inside = true;
+    expect(inside).toBe(false);
   });
 });
 

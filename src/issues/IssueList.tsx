@@ -1,7 +1,7 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { interactive, LazyColumn, percent, scrollPosition, shortcut } from 'gesso-core';
+import { focusRing, interactive, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Button, Select } from 'gesso-components';
 import { formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
@@ -127,6 +127,19 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       ];
     })
   );
+  // Folding a group, from the keyboard.
+  ctx.onUnmount(
+    commands.register(() => {
+      const groups = issues.view.summary.value.groups.filter(g => g.key !== 'all');
+      return groups.map(g => ({
+        id: `fold:${g.key}`,
+        label: `${g.collapsed ? 'Expand' : 'Collapse'} the ${g.label} group`,
+        group: 'List',
+        keywords: 'fold unfold',
+        run: () => fold(g.key)
+      }));
+    })
+  );
   // What the person narrowed the list to, kept in the url's query string.
   const refine = router.match.pipe(
     map(match => filterFromQuery(match?.query ?? {})),
@@ -211,6 +224,22 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     collapsed.value = current.includes(key) ? current.filter(k => k !== key) : [...current, key];
   };
 
+  // The rows on screen, by position, for the listbox's active descendant.
+  const rowNodes = new Map<number, UiNode>();
+  const rowsChanged = internalState(0);
+  const trackRow = (index: number, node: UiNode | null): void => {
+    if (node === null) {
+      if (rowNodes.has(index)) rowNodes.delete(index);
+    } else {
+      rowNodes.set(index, node);
+    }
+    rowsChanged.value += 1;
+  };
+  const cursorRow = combineLatest([cursor, rowsChanged]).pipe(
+    map(([at]) => rowNodes.get(at) ?? null),
+    distinctUntilChanged()
+  );
+
   const key = (keys: string, label: string, run: () => void) => shortcut({ registry, keys, label, scoped: false, group: 'List', run });
 
   const list = LazyColumn(
@@ -220,7 +249,13 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       revision: issues.view.summary,
       estimatedExtent: ROW,
       scrollY,
+      // One tab stop, as a list a person walks with the arrows is: the
+      // rows are its options, and the row under the cursor is its active
+      // descendant, so a screen reader reads each as the cursor reaches it.
       label: 'Issues',
+      role: 'listbox',
+      focusable: true,
+      activeDescendant: cursorRow,
       modifiers: [
         scrollPosition({
           onChange: offset => {
@@ -228,7 +263,8 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
             report(offset.y);
           }
         }),
-        probe.modifier
+        probe.modifier,
+        LIST_FOCUS
       ]
     },
     position => {
@@ -237,7 +273,14 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       return located.kind === 'header' ? (
         <GroupHeader group={located.group} onToggle={() => fold(located.group.key)} />
       ) : (
-        <IssueRowView index={located.index} cursor={cursor} onOpen={() => open(located.index)} onToggle={() => toggle(located.index)} />
+        <IssueRowView
+          index={located.index}
+          total={issues.view.summary.pipe(map(summary => summary.total))}
+          cursor={cursor}
+          track={trackRow}
+          onOpen={() => open(located.index)}
+          onToggle={() => toggle(located.index)}
+        />
       );
     }
   );
@@ -309,6 +352,10 @@ function Toolbar(
             return `${all.toLocaleString('en-US')} issues · ${summary.queryMs} ms`;
           })
         )}
+        // The time is a proof for the eye; a screen reader hears the count.
+        label={issues.view.summary.pipe(
+          map(summary => `${summary.groups.reduce((sum, group) => sum + group.count, 0).toLocaleString('en-US')} issues`)
+        )}
         fontSize={12}
         color="textMuted"
         flexGrow={1}
@@ -326,6 +373,8 @@ function GroupHeader(inputs: Inputs<{ group: QueryGroup; onToggle: () => void }>
   const group = inputs.group;
   return (
     <button
+      // The pointer's way to fold a group; the keyboard's is the palette.
+      focusable={false}
       height={ROW}
       paddingLeft={16}
       paddingRight={16}
@@ -345,6 +394,9 @@ function GroupHeader(inputs: Inputs<{ group: QueryGroup; onToggle: () => void }>
   );
 }
 
+/** Where keyboard focus is, when it's on the list. One value, so it's never re-attached. */
+const LIST_FOCUS = focusRing();
+
 /** "now", "5m", "3h", "4d", "2w", or "Mar 4". */
 export function ago(at: number, now = Date.now()): string {
   const minutes = Math.max(0, Math.round((now - at) / 60_000));
@@ -359,7 +411,14 @@ export function ago(at: number, now = Date.now()): string {
 }
 
 function IssueRowView(
-  inputs: Inputs<{ index: number; cursor: number; onOpen: () => void; onToggle: () => void }>,
+  inputs: Inputs<{
+    index: number;
+    total: number;
+    cursor: number;
+    track: (index: number, node: UiNode | null) => void;
+    onOpen: () => void;
+    onToggle: () => void;
+  }>,
   ctx: ComponentContext
 ) {
   const issues = ctx.channel(Issues);
@@ -383,13 +442,17 @@ function IssueRowView(
   const field = <T,>(read: (r: IssueRow) => T, empty: T) => row.pipe(map(r => (r === undefined ? empty : read(r))));
 
   return (
-    <button
+    <box
+      ref={(node: UiNode | null) => inputs.track.value(index, node)}
       height={ROW}
       paddingLeft={8}
       paddingRight={16}
       cursor="pointer"
-      label={field(r => `${r.key} ${r.title}`, 'Loading issue')}
+      role="option"
+      label={field(r => `${r.key} ${r.title}, ${r.stateName}${r.assigneeName === '' ? '' : `, ${r.assigneeName}`}`, 'Loading issue')}
       states={selected.pipe(map(on => (on ? ['selected'] : [])))}
+      posInSet={index + 1}
+      setSize={inputs.total}
       backgroundColor={combineLatest([selected, atCursor]).pipe(
         map(([on, here]) => (on ? 'surfaceRaised' : here ? 'surface' : 'background'))
       )}
@@ -400,6 +463,9 @@ function IssueRowView(
       <row gap={12} y="center">
         <box width={3} height={24} flexShrink={0} borderRadius={2} backgroundColor={atCursor.pipe(map(here => (here ? 'primary' : 'background')))} />
         <button
+          // A target for the pointer; the keyboard selects with x, and the
+          // option says whether it's selected.
+          focusable={false}
           label={selected.pipe(map(on => (on ? 'Deselect' : 'Select')))}
           states={selected.pipe(map(on => (on ? ['checked'] : [])))}
           onClick={() => inputs.onToggle.value()}
@@ -437,7 +503,7 @@ function IssueRowView(
           <text text={field(r => r.initials, '')} fontSize={10} fontWeight={600} color="textMuted" />
         </box>
       </row>
-    </button>
+    </box>
   );
 }
 

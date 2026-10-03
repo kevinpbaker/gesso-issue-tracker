@@ -1,7 +1,7 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { dragSource, draggable, dropTarget, LazyColumn, percent, scrollPosition, shortcut } from 'gesso-core';
+import { dragSource, draggable, dropTarget, focusRing, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Select } from 'gesso-components';
 import { internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
@@ -73,7 +73,14 @@ interface BoardState {
   readonly cursor: ReturnType<typeof internalState<Spot | null>>;
   readonly hint: ReturnType<typeof internalState<Spot | null>>;
   readonly picked: ReturnType<typeof internalState<Picked | null>>;
+  /** The cards on screen, by slot, for the board's active descendant. */
+  readonly cards: Map<string, UiNode>;
+  readonly cardsChanged: ReturnType<typeof internalState<number>>;
 }
+
+/** Where keyboard focus is, when it's on the board. One value, so it's never re-attached. */
+const BOARD_FOCUS = focusRing();
+const BOARD_KEYS = 'Arrows move between cards, Page Up and Page Down between lanes. Space picks a card up and puts it down, Enter opens it.';
 
 export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const board = ctx.channel(Board);
@@ -83,8 +90,15 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const state: BoardState = {
     cursor: internalState<Spot | null>(null),
     hint: internalState<Spot | null>(null),
-    picked: internalState<Picked | null>(null)
+    picked: internalState<Picked | null>(null),
+    cards: new Map(),
+    cardsChanged: internalState(0)
   };
+  // The card under the cursor, which a screen reader reads as the board's focus.
+  const cursorCard = combineLatest([state.cursor, state.cardsChanged]).pipe(
+    map(([at]) => (at === null ? null : (state.cards.get(slotKey(at.lane, at.stateId, at.index)) ?? null))),
+    distinctUntilChanged()
+  );
   const announcement = internalState('');
 
   const lanes = () => board.view.lanes.value;
@@ -219,7 +233,22 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
       </row>
       <text text={announcement} role="status" live="polite" label="Board announcements" height={0} opacity={0} />
       {/* A row that overflows scrolls sideways, so five columns fit any width. */}
-      <row overflow="scroll" flexGrow={1} minWidth={0} width={percent(100)} label="Board">
+      {/* One tab stop: the cards are walked with the cursor, and the one
+          under it is the board's active descendant. */}
+      <row
+        overflow="scroll"
+        flexGrow={1}
+        minWidth={0}
+        width={percent(100)}
+        label="Board"
+        role="group"
+        description={BOARD_KEYS}
+        focusable={true}
+        activeDescendant={cursorCard}
+        modifiers={[BOARD_FOCUS]}
+        onFocus={() => {
+          if (state.cursor.value === null) state.cursor.value = first();
+        }}>
         <column padding={12} paddingTop={0} gap={8}>
           <row gap={12}>
             {board.view.columns.pipe(
@@ -343,7 +372,16 @@ function Cell(inputs: Inputs<{ lane: string; stateId: string; height: number | n
       ),
       estimatedExtent: CARD,
       scrollY,
-      label: `${stateId} cards`,
+      role: 'list',
+      // "Todo, Ada Okafor, 12 cards": the column, the lane when there are
+      // lanes, and how many.
+      label: combineLatest([board.view.columns, board.view.lanes, count]).pipe(
+        map(([columns, lanes, cards]) => {
+          const column = columns.find(c => c.id === stateId)?.name ?? stateId;
+          const laneName = lane === ALL_LANE ? '' : `, ${lanes.find(l => l.key === lane)?.label ?? lane}`;
+          return `${column}${laneName}, ${cards} ${cards === 1 ? 'card' : 'cards'}`;
+        })
+      ),
       modifiers: [
         scrollPosition({
           onChange: offset => {
@@ -434,7 +472,12 @@ function Card(
         backgroundColor="background"
         opacity={carried.pipe(map(lifted => (lifted ? 0.5 : 1)))}
         cursor="grab"
-        role="button"
+        role="listitem"
+        ref={(node: UiNode | null) => {
+          if (node === null) state.cards.delete(key);
+          else state.cards.set(key, node);
+          state.cardsChanged.value += 1;
+        }}
         label={field(row => `${row.key} ${row.title}`, 'Loading card')}
         onClick={() => {
           const row = board.view.slots.value[key];

@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "phase0:markdown": "node --experimental-strip-types scripts/phase0-markdown.ts"
+    "phase0:markdown": "node --experimental-strip-types scripts/phase0-markdown.ts",
+    "check:a11y": "node scripts/check-a11y.ts",
+    "check:a11y:update": "node scripts/check-a11y.ts --update"
   },
   "dependencies": {
     "gesso-components": "^0.4.2",

@@ -154,7 +154,15 @@ interface BlockHandlers {
   /** True when the Enter was the editor's, false to let the field have it. */
   enter(id: string, caret: number): boolean;
   backspaceAtStart(id: string): void;
+  /** True when the item's depth changed; Tab that changes nothing is free to move on. */
   indent(id: string, by: 1 | -1, caret: number): boolean;
+  /**
+   * Escape, then Tab, leaves the editor whatever the caret is in: the
+   * way out a field that takes Tab for itself has to offer. True when
+   * the last key was that Escape.
+   */
+  tabReleased(): boolean;
+  releaseTab(on: boolean): void;
   toggle(id: string): void;
   /** Bold, italic, code, strikethrough or a link over the block's selection, or over a selection across blocks. */
   format(id: string, kind: Mark | 'link', start: number, end: number): void;
@@ -200,6 +208,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
   const requests = new FocusRequests();
   const fields: Fields = { block: new WeakMap(), node: new Map() };
   const slash = internalState<SlashState | null>(null);
+  let tabReleased = false;
   /** Whether the document is shown formatted or as its markdown. */
   const mode = internalState<'rich' | 'source'>('rich');
   /** The markdown the source view opened with. */
@@ -458,10 +467,15 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const above = blocks.value[index - 1];
       const deepest = above !== undefined && isList(above.type) ? (above.indent ?? 0) + 1 : 0;
       const indent = Math.max(0, Math.min(deepest, (current.indent ?? 0) + by));
-      if (indent !== (current.indent ?? 0)) {
-        commit(replaced(index, [{ ...current, indent }]), { id, offset: caret }, 'structure', here(id, caret));
+      if (indent === (current.indent ?? 0)) {
+        return false;
       }
+      commit(replaced(index, [{ ...current, indent }]), { id, offset: caret }, 'structure', here(id, caret));
       return true;
+    },
+    tabReleased: () => tabReleased,
+    releaseTab: on => {
+      tabReleased = on;
     },
     toggle(id) {
       const index = indexOf(id);
@@ -756,7 +770,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     </column>
   );
   const editor = fit ? (
-    <column width={percent(100)} borderRadius={10} borderWidth={1} borderColor="border" role="region" label={inputs.label.value ?? 'Document'}>
+    <column width={percent(100)} borderRadius={10} borderWidth={1} borderColor="border" role="region" label={inputs.label.value ?? 'Document'} description={KEYS_HINT}>
       {content}
     </column>
   ) : (
@@ -769,7 +783,8 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       borderWidth={1}
       borderColor="border"
       role="region"
-      label={inputs.label.value ?? 'Document'}>
+      label={inputs.label.value ?? 'Document'}
+      description={KEYS_HINT}>
       {content}
     </scrollview>
   );
@@ -816,7 +831,9 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         <Button
           size="small"
           variant="plain"
-          label={mode.pipe(map(m => (m === 'rich' ? 'View markdown source' : 'View formatted')))}
+          // Named for its editor: a page with a description and a comment
+          // box has two of these, and they must not sound the same.
+          label={mode.pipe(map(m => `${m === 'rich' ? 'View the markdown of' : 'View formatted:'} ${inputs.label.value ?? 'the document'}`))}
           onClick={() => handlers.toggleSource()}>
           <text text={mode.pipe(map(m => (m === 'rich' ? 'Markdown' : 'Formatted')))} fontSize={12} color="textMuted" />
         </Button>
@@ -922,6 +939,9 @@ function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: st
   );
 }
 
+/** Read after the editor's name: the keys that don't do what they do elsewhere. */
+const KEYS_HINT = 'Tab indents a list item. Escape, then Tab, moves on.';
+
 const HEADING_SIZES = [26, 21, 18, 16, 15, 14];
 /** The source view's field, among the blocks' fields. */
 const SOURCE = 'source';
@@ -943,6 +963,13 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     // key, not tracked from events: a caret placed programmatically
     // (by a focus request) raises no selection event.
     if (event.currentTarget === null) {
+      return;
+    }
+    // Escape (with no menu open to close) frees the next Tab to leave;
+    // any other key takes that back.
+    const released = handlers.tabReleased();
+    handlers.releaseTab(event.key === 'Escape');
+    if (event.key === 'Tab' && released) {
       return;
     }
     const model = editorFor(event.currentTarget);
@@ -975,7 +1002,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     } else if (event.key === 'Backspace' && caret === 0 && !meta && !ctrl) {
       handlers.backspaceAtStart(id);
       event.preventDefault();
-    } else if (event.key === 'Tab' && handlers.indent(id, shift ? -1 : 1, Math.max(0, caret))) {
+    } else if (event.key === 'Tab' && !handlers.tabReleased() && handlers.indent(id, shift ? -1 : 1, Math.max(0, caret))) {
       event.preventDefault();
     } else if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
       // Moving between blocks is Gesso's: the blocks are an editing group.
@@ -1039,7 +1066,11 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
           <box width={22} height={22} x="end" y="center">
             {type === 'task' ? (
               <button
-                label={current.pipe(map(b => (b.checked === true ? 'Mark not done' : 'Mark done')))}
+                // A checkbox named by its task, as a screen reader expects
+                // a checklist to sound: "Reproduced locally, checkbox, not checked".
+                role="checkbox"
+                label={current.pipe(map(b => (b.text.trim() === '' ? 'Task' : b.text)))}
+                states={current.pipe(map(b => (b.checked === true ? ['checked'] : [])))}
                 onClick={() => handlers.toggle(id)}
                 width={16}
                 height={16}

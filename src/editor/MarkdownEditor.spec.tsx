@@ -524,6 +524,53 @@ describe('on a page', () => {
   });
 });
 
+describe('a checklist for a screen reader', () => {
+  it('makes each task box a checkbox named for its task', async () => {
+    await mount('- [ ] Reproduced locally\n- [x] Triaged');
+    expect(ui.getByRole('checkbox', { name: 'Reproduced locally' })).toBeDefined();
+    expect(ui.getSemantics(ui.getByRole('checkbox', { name: 'Triaged' })).states).toContain('checked');
+    expect(ui.getByRole('button', { name: 'View the markdown of the document' })).toBeDefined();
+  });
+});
+
+describe('leaving with Tab', () => {
+  function Host(_inputs: Inputs<{}>, _ctx: ComponentContext) {
+    return (
+      <column width={percent(100)} gap={10}>
+        <MarkdownEditor value={'- one\n- two'} fit label="Notes" />
+        <editabletext label="Elsewhere" value="" width={200} />
+      </column>
+    );
+  }
+  const elsewhere = () => ui.runtime.input.focus.focusedNode === ui.getByLabel('Elsewhere');
+
+  it('indents an item that can be, and moves on from one that cannot', async () => {
+    ui = renderTest(createComponent(Host, {}), { width: 600, height: 400 });
+    await ui.settle();
+    // The first item has nothing above it to nest under: Tab moves on.
+    await caretIn('List item', 0, 0);
+    await press('Tab');
+    expect(elsewhere()).toBe(true);
+    // The second can nest under the first: Tab indents it.
+    await caretIn('List item', 1, 0);
+    await press('Tab');
+    expect(elsewhere()).toBe(false);
+    // Nested as deep as it goes, Tab moves on again.
+    await press('Tab');
+    expect(elsewhere()).toBe(true);
+  });
+
+  it('moves on after Escape, wherever the caret is', async () => {
+    ui = renderTest(createComponent(Host, {}), { width: 600, height: 400 });
+    await ui.settle();
+    await caretIn('List item', 1, 0);
+    await press('Escape');
+    await press('Tab');
+    expect(elsewhere()).toBe(true);
+    expect(ui.getSemantics(ui.getByRole('region', { name: 'Notes' })).description).toBe('Tab indents a list item. Escape, then Tab, moves on.');
+  });
+});
+
 describe('the exit criterion', () => {
   /**
    * Phase 5's exit criterion, as one person at the keyboard: a long bug

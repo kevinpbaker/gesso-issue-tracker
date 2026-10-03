@@ -53,14 +53,20 @@ export function Sidebar(_inputs: Inputs<{}>, ctx: ComponentContext) {
           <Section title="Projects" />
           {meta.view.projects.pipe(
             map(projects =>
-              projects.map(project => (
-                <NavItem
-                  key={project.id}
-                  label={project.name}
-                  href={`/project/${project.id}`}
-                  detail={meta.view.teams.value.find(team => team.id === project.teamId)?.key ?? ''}
-                />
-              ))
+              projects.map(project => {
+                const team = meta.view.teams.value.find(t => t.id === project.teamId);
+                // Several teams have a "Q3 launch": the team key tells them
+                // apart on screen, and the team's name does when it's heard.
+                return (
+                  <NavItem
+                    key={project.id}
+                    label={project.name}
+                    name={team === undefined ? project.name : `${project.name}, ${team.name}`}
+                    href={`/project/${project.id}`}
+                    detail={team?.key ?? ''}
+                  />
+                );
+              })
             )
           )}
           <Section title="Editor" />

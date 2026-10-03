@@ -112,3 +112,22 @@ describe('the board from the keyboard', () => {
     expect(h.ui.getByRole('status')).toBeTruthy();
   });
 });
+
+describe('the board for a screen reader', () => {
+  it('is one tab stop whose active descendant is the card under the cursor', async () => {
+    await mount();
+    const board = h.ui.getByRole('group', { name: 'Board' });
+    h.ui.fireEvent.focus(board);
+    await settle();
+    const active = () => {
+      const id = h.ui.getSemantics(board).activeDescendant;
+      return id === undefined ? undefined : h.ui.getSemantics(h.ui.getAllByRole('listitem').find(node => node.id === id)!).label;
+    };
+    const first = active();
+    expect(first).toMatch(/^[A-Z]+-\d+ /);
+    await press('j');
+    expect(active()).not.toBe(first);
+    expect(h.ui.getSemantics(board).description).toContain('Space picks a card up');
+    expect(h.ui.getAllByRole('list').length).toBeGreaterThanOrEqual(5);
+  });
+});
