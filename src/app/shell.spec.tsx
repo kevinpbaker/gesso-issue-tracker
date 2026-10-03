@@ -127,7 +127,7 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     // Choosing a destination closes it too.
     ui.fireEvent.click(ui.getByRole('button', { name: 'Menu' }));
     await settle();
-    ui.fireEvent.click(ui.getByRole('button', { name: 'My issues' }));
+    ui.fireEvent.click(ui.getByRole('link', { name: 'My issues' }));
     await settle();
     expect(ui.runtime.services.get(RouterService).url.value).toBe('/my-issues');
     expect(ui.queryByRole('navigation', { name: 'Sidebar' })).toBeNull();
@@ -145,5 +145,8 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     await mount('/team/web/list');
     expect(ui.queryByRole('button', { name: 'Menu' })).toBeNull();
     expect(ui.getByRole('navigation', { name: 'Sidebar' })).toBeDefined();
+    // The open page's link is the current one, which a screen reader says.
+    expect(ui.getSemantics(ui.getByRole('link', { name: 'Web' })).states).toContain('current');
+    expect(ui.getSemantics(ui.getByRole('link', { name: 'My issues' })).states ?? []).not.toContain('current');
   });
 });

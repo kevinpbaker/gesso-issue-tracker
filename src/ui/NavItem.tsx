@@ -23,7 +23,10 @@ export function NavItem(
     <button
       label={inputs.name.pipe(map(name => name ?? inputs.label.value))}
       onClick={() => router.navigate(href)}
-      states={active.pipe(map(on => (on ? ['selected'] : [])))}
+      // A link to a page, and the open page's is the current one: a
+      // screen reader ignores `selected` on a link or a button.
+      role="link"
+      states={active.pipe(map(on => (on ? ['current'] : [])))}
       height={30}
       paddingLeft={8 + (inputs.indent.value ?? 0) * 14}
       paddingRight={8}

@@ -11,37 +11,80 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | --- | --- | --- | --- |
 | navigation | Sidebar |  |  |
 | StaticText | Gesso Issues |  |  |
-| button | My issues |  |  |
+| link | My issues |  |  |
+| StaticText | My issues |  |  |
 | StaticText | Teams |  |  |
-| button | Web |  |  |
-| button | Web board |  |  |
-| button | Platform API |  |  |
-| button | Platform API board |  |  |
-| button | Mobile |  |  |
-| button | Mobile board |  |  |
-| button | Operations |  |  |
-| button | Operations board |  |  |
+| link | Web |  |  |
+| StaticText | Web |  |  |
+| StaticText | WEB |  |  |
+| link | Web board |  |  |
+| StaticText | Board |  |  |
+| link | Platform API |  |  |
+| StaticText | Platform API |  |  |
+| StaticText | API |  |  |
+| link | Platform API board |  |  |
+| StaticText | Board |  |  |
+| link | Mobile |  |  |
+| StaticText | Mobile |  |  |
+| StaticText | MOB |  |  |
+| link | Mobile board |  |  |
+| StaticText | Board |  |  |
+| link | Operations |  |  |
+| StaticText | Operations |  |  |
+| StaticText | OPS |  |  |
+| link | Operations board |  |  |
+| StaticText | Board |  |  |
 | StaticText | Views |  |  |
-| button | All issues |  |  |
-| button | Active |  |  |
-| button | Backlog |  |  |
-| button | Urgent |  |  |
+| link | All issues |  |  |
+| StaticText | All issues |  |  |
+| link | Active |  |  |
+| StaticText | Active |  |  |
+| link | Backlog |  |  |
+| StaticText | Backlog |  |  |
+| link | Urgent |  |  |
+| StaticText | Urgent |  |  |
 | StaticText | Projects |  |  |
-| button | Q3 launch, Web |  |  |
-| button | Billing v2, Web |  |  |
-| button | Onboarding refresh, Web |  |  |
-| button | Q3 launch, Platform API |  |  |
-| button | Billing v2, Platform API |  |  |
-| button | Onboarding refresh, Platform API |  |  |
-| button | Q3 launch, Mobile |  |  |
-| button | Billing v2, Mobile |  |  |
-| button | Onboarding refresh, Mobile |  |  |
-| button | Q3 launch, Operations |  |  |
-| button | Billing v2, Operations |  |  |
-| button | Onboarding refresh, Operations |  |  |
+| link | Q3 launch, Web |  |  |
+| StaticText | Q3 launch |  |  |
+| StaticText | WEB |  |  |
+| link | Billing v2, Web |  |  |
+| StaticText | Billing v2 |  |  |
+| StaticText | WEB |  |  |
+| link | Onboarding refresh, Web |  |  |
+| StaticText | Onboarding refresh |  |  |
+| StaticText | WEB |  |  |
+| link | Q3 launch, Platform API |  |  |
+| StaticText | Q3 launch |  |  |
+| StaticText | API |  |  |
+| link | Billing v2, Platform API |  |  |
+| StaticText | Billing v2 |  |  |
+| StaticText | API |  |  |
+| link | Onboarding refresh, Platform API |  |  |
+| StaticText | Onboarding refresh |  |  |
+| StaticText | API |  |  |
+| link | Q3 launch, Mobile |  |  |
+| StaticText | Q3 launch |  |  |
+| StaticText | MOB |  |  |
+| link | Billing v2, Mobile |  |  |
+| StaticText | Billing v2 |  |  |
+| StaticText | MOB |  |  |
+| link | Onboarding refresh, Mobile |  |  |
+| StaticText | Onboarding refresh |  |  |
+| StaticText | MOB |  |  |
+| link | Q3 launch, Operations |  |  |
+| StaticText | Q3 launch |  |  |
+| StaticText | OPS |  |  |
+| link | Billing v2, Operations |  |  |
+| StaticText | Billing v2 |  |  |
+| StaticText | OPS |  |  |
+| link | Onboarding refresh, Operations |  |  |
+| StaticText | Onboarding refresh |  |  |
+| StaticText | OPS |  |  |
 | StaticText | Editor |  |  |
-| button | Sample document |  |  |
-| button | 5,000 lines |  |  |
+| link | Sample document |  |  |
+| StaticText | Sample document |  |  |
+| link | 5,000 lines |  |  |
+| StaticText | 5,000 lines |  |  |
 | radiogroup | Appearance | required=false |  |
 | radio | Auto | checked=true |  |
 | radio | Light | checked=false |  |
@@ -90,40 +133,40 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-55 controls (button, radio, textbox, combobox, option), every one of them named.
+55 controls (button, radio, textbox, combobox, option, link), every one of them named.
 
 ## Tab order
 
 What the Tab key reaches from the top of the route, in order, as the
 accessibility tree reports focus after each press.
 
-1. button 'My issues'
-2. button 'Web'
-3. button 'Web board'
-4. button 'Platform API'
-5. button 'Platform API board'
-6. button 'Mobile'
-7. button 'Mobile board'
-8. button 'Operations'
-9. button 'Operations board'
-10. button 'All issues'
-11. button 'Active'
-12. button 'Backlog'
-13. button 'Urgent'
-14. button 'Q3 launch, Web'
-15. button 'Billing v2, Web'
-16. button 'Onboarding refresh, Web'
-17. button 'Q3 launch, Platform API'
-18. button 'Billing v2, Platform API'
-19. button 'Onboarding refresh, Platform API'
-20. button 'Q3 launch, Mobile'
-21. button 'Billing v2, Mobile'
-22. button 'Onboarding refresh, Mobile'
-23. button 'Q3 launch, Operations'
-24. button 'Billing v2, Operations'
-25. button 'Onboarding refresh, Operations'
-26. button 'Sample document'
-27. button '5,000 lines'
+1. link 'My issues'
+2. link 'Web'
+3. link 'Web board'
+4. link 'Platform API'
+5. link 'Platform API board'
+6. link 'Mobile'
+7. link 'Mobile board'
+8. link 'Operations'
+9. link 'Operations board'
+10. link 'All issues'
+11. link 'Active'
+12. link 'Backlog'
+13. link 'Urgent'
+14. link 'Q3 launch, Web'
+15. link 'Billing v2, Web'
+16. link 'Onboarding refresh, Web'
+17. link 'Q3 launch, Platform API'
+18. link 'Billing v2, Platform API'
+19. link 'Onboarding refresh, Platform API'
+20. link 'Q3 launch, Mobile'
+21. link 'Billing v2, Mobile'
+22. link 'Onboarding refresh, Mobile'
+23. link 'Q3 launch, Operations'
+24. link 'Billing v2, Operations'
+25. link 'Onboarding refresh, Operations'
+26. link 'Sample document'
+27. link '5,000 lines'
 28. radiogroup 'Appearance'
 29. separator 'Sidebar'
 30. button 'New issue'
