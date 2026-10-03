@@ -33,7 +33,12 @@ export function NavItem(
       borderRadius={6}
       cursor="pointer"
       backgroundColor={active.pipe(map(on => (on ? 'controlBackground' : 'surface')))}
-      modifiers={[HOVER]}>
+      modifiers={[HOVER]}
+      // A button lays its content out as a box does, at the top left;
+      // the label sits in the middle of the item's height, and the row
+      // spans it so the detail goes to the far end.
+      x="stretch"
+      y="center">
       <row x="space-between" y="center" gap={8}>
         <box flexShrink={1} minWidth={0}>
           <text
