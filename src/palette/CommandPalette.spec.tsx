@@ -7,6 +7,7 @@ import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'ges
 
 import { ShortcutsService } from '../app/ShortcutsService';
 import { UndoToast } from '../app/UndoToast';
+import { ListPlaces } from '../issues/ListPlaces';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueList } from '../issues/IssueList';
@@ -85,6 +86,7 @@ async function mount(recent: readonly string[] = []): Promise<void> {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(CommandsService);
   const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1000, height: 700, services });
   ui.runtime.services.get(RouterService).setRoutes({ routes: [route({ path: '/issue/:key', component: Harness })] });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { darkTheme, lightTheme } from 'gesso-core';
+import { darkTheme, editorFor, lightTheme } from 'gesso-core';
 import { createComponent, RouterService, ServiceRegistry, ShellService } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
@@ -13,11 +13,16 @@ import { NewIssueService } from '../compose/NewIssueService';
 import { IssueDetailChannel } from '../detail/IssueDetailContract';
 import { IssueDetailService } from '../detail/IssueDetailService';
 import { detailSource } from '../detail/detailSource';
+import { StepService } from '../detail/StepService';
+import { Steps } from '../detail/StepsContract';
+import { stepsSource } from '../detail/stepsSource';
 import { IssueQueryService } from '../issues/IssueQueryService';
 import { Issues } from '../issues/IssuesContract';
 import { issuesSource } from '../issues/issuesSource';
 import { IssueStore } from '../model/IssueStore';
+import { runQuery } from '../model/query';
 import { seedWorkspace } from '../model/seed';
+import { teamQuery } from '../issues/listScreens';
 import { CommandsService } from '../palette/CommandsService';
 import { Palette } from '../palette/PaletteContract';
 import { PaletteService } from '../palette/PaletteService';
@@ -32,6 +37,7 @@ import { PreferencesStore } from './PreferencesStore';
 import { preferencesSource } from './preferencesSource';
 import { AppRoot, ROUTES, TeamIssues } from './routes';
 import { ShortcutsService } from './ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { WorkspaceMeta } from './WorkspaceContract';
 import { workspaceSource } from './workspaceSource';
 
@@ -48,13 +54,14 @@ const disk = {
 
 let ui: Rendered;
 let served: ServedForTest;
+let store: IssueStore;
 afterEach(() => {
   ui?.unmount();
   served?.dispose();
 });
 
 async function mount(url: string, width = 1280, height = 713): Promise<void> {
-  const store = new IssueStore(seedWorkspace({ issues: 400 }));
+  store = new IssueStore(seedWorkspace({ issues: 400 }));
   const preferences = new PreferencesStore(disk);
   // As the app worker does at start: nothing saved, so a first visit.
   void preferences.restore();
@@ -62,12 +69,14 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   const views = new ViewsStore(disk);
   const recent = new RecentStore(disk);
   const palette = new PaletteService(store, () => recent.keys.value);
+  const board = createBoardStore(store);
   served = serveForTest([
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
     { token: Preferences, source: preferencesSource(preferences) },
-    { token: Board, source: boardSource(createBoardStore(store)) },
+    { token: Board, source: boardSource(board) },
     { token: Issues, source: issuesSource(new IssueQueryService(store), store, () => store.reset()) },
     { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) },
+    { token: Steps, source: stepsSource(new StepService(store, board)) },
     {
       token: Compose,
       source: { view: { draft: compose.draft, filed: compose.filed }, commands: { save: d => compose.save(d), file: d => compose.file(d), discard: () => compose.discard() } }
@@ -78,6 +87,7 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(NewIssueService);
   services.register(CommandsService);
   ui = renderTest(createComponent(AppRoot), { channels: served.registry, width, height, services });
@@ -233,5 +243,199 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     // The open page's link is the current one, which a screen reader says.
     expect(ui.getSemantics(ui.getByRole('link', { name: 'Web' })).states).toContain('current');
     expect(ui.getSemantics(ui.getByRole('link', { name: 'My issues' })).states ?? []).not.toContain('current');
+  });
+});
+
+describe('stepping through a list from an issue, and back', () => {
+  const url = () => ui.runtime.services.get(RouterService).url.value;
+  const list = () => ui.getByRole('listbox', { name: 'Issues' });
+  /** The key of the row under the list's cursor, as a screen reader hears it. */
+  const cursorKey = (): string => {
+    const id = ui.getSemantics(list()).activeDescendant;
+    const row = ui.getAllByRole('option').find(node => node.id === id);
+    return row === undefined ? '' : ui.getSemantics(row).label!.split(' ')[0]!;
+  };
+  /** Web's issues, as its list shows them. */
+  const webOrder = () => runQuery(store.workspace, store.issues(), teamQuery('web')).ids.map(id => store.get(id)!.key);
+  const position = () => ui.getSemantics(ui.getByRole('group', { name: 'Web › Issues' })).label;
+  async function press(key: string, modifiers: { shift?: boolean; ctrl?: boolean } = {}): Promise<void> {
+    ui.fireEvent.press(key, modifiers);
+    await settle();
+  }
+
+  it('steps with j and k through the list the issue was opened from, and Escape goes back with the cursor on the last one', async () => {
+    await mount('/team/web/list');
+    const order = webOrder();
+    await press('j');
+    await press('Enter');
+    expect(url()).toBe(`/issue/${order[1]}`);
+    expect(textOf(ui.getByRole('group', { name: 'Web › Issues' }))).toContain(`2 of ${order.length}`);
+    expect(ui.getSemantics(ui.getByText(`2 of ${order.length}`)).label).toBe(`Issue 2 of ${order.length} in Web › Issues`);
+
+    await press('j');
+    await press('j');
+    expect(url()).toBe(`/issue/${order[3]}`);
+    await press('k');
+    expect(url()).toBe(`/issue/${order[2]}`);
+    // The buttons do what the keys do.
+    ui.fireEvent.click(ui.getByRole('button', { name: 'Next issue' }));
+    await settle();
+    expect(url()).toBe(`/issue/${order[3]}`);
+
+    await press('Escape');
+    expect(url()).toBe('/team/web/list');
+    expect(cursorKey()).toBe(order[3]);
+    // The cursor goes on from there.
+    await press('j');
+    expect(cursorKey()).toBe(order[4]);
+  });
+
+  it('has nowhere to go before the first issue', async () => {
+    await mount('/team/web/list');
+    await press('Enter');
+    const first = url();
+    expect(ui.getSemantics(ui.getByRole('button', { name: 'Previous issue' })).disabled).toBe(true);
+    await press('k');
+    expect(url()).toBe(first);
+  });
+
+  it('comes back scrolled where the list was, and scrolls only as far as it must to show an issue stepped to', async () => {
+    await mount('/team/web/list');
+    const box = ui.getVisibleBox(list());
+    ui.fireEvent.wheel({ x: box.x + box.width / 2, y: box.y + 200, deltaY: 1200 });
+    await settle();
+    await settle();
+    // A row well inside the list, opened with the pointer.
+    const row = ui
+      .getAllByRole('option')
+      .find(node => ui.getVisibleBox(node).y > box.y + 200 && ui.getVisibleBox(node).y < box.y + 300)!;
+    const key = ui.getSemantics(row).label!.split(' ')[0]!;
+    const before = ui.getVisibleBox(row).y;
+    ui.fireEvent.click(row);
+    await settle();
+    expect(url()).toBe(`/issue/${key}`);
+    await press('Escape');
+    const back = ui.getAllByRole('option').find(node => ui.getSemantics(node).label!.startsWith(`${key} `))!;
+    expect(ui.getVisibleBox(back).y).toBe(before);
+    expect(cursorKey()).toBe(key);
+
+    // Stepped well past the bottom of what the list showed: it scrolls
+    // just enough to show that one, at the bottom edge.
+    ui.fireEvent.click(back);
+    await settle();
+    for (let i = 0; i < 25; i++) await press('j');
+    const far = url().slice('/issue/'.length);
+    await press('Escape');
+    expect(cursorKey()).toBe(far);
+    const shown = ui.getAllByRole('option').find(node => ui.getSemantics(node).label!.startsWith(`${far} `))!;
+    const edge = ui.getVisibleBox(list());
+    expect(ui.getVisibleBox(shown).y + ui.getVisibleBox(shown).height).toBeLessThanOrEqual(edge.y + edge.height);
+    expect(ui.getVisibleBox(shown).y + ui.getVisibleBox(shown).height).toBeGreaterThan(edge.y + edge.height - 40);
+  });
+
+  it('keeps the selection and the grouping chosen, there and back', async () => {
+    await mount('/team/web/list');
+    ui.fireEvent.click(ui.getByRole('combobox', { name: 'Group by' }));
+    await settle();
+    ui.fireEvent.click(ui.getAllByRole('option').find(node => ui.getSemantics(node).label === 'No grouping')!);
+    await settle();
+    await press('x');
+    await press('j');
+    await press('Enter');
+    await press('j');
+    await press('Escape');
+    expect(ui.getSemantics(ui.getByRole('combobox', { name: 'Group by' })).valueText).toBe('No grouping');
+    expect(ui.getByRole('toolbar', { name: 'Selected issues' })).toBeDefined();
+    expect(ui.getAllByRole('option', { states: ['selected'] })).toHaveLength(1);
+    // Stepped through the list as it was arranged: by priority, ungrouped.
+    const order = runQuery(store.workspace, store.issues(), { ...teamQuery('web'), group: 'none' }).ids.map(id => store.get(id)!.key);
+    expect(cursorKey()).toBe(order[2]);
+  });
+
+  it('comes back to a narrowed list narrowed, with its selection', async () => {
+    await mount('/team/web/list?status=todo');
+    const order = runQuery(store.workspace, store.issues(), { ...teamQuery('web'), refine: { stateIds: ['todo'] } }).ids.map(id => store.get(id)!.key);
+    await press('x');
+    await press('Enter');
+    expect(textOf(ui.getByRole('group', { name: 'Web › Issues' }))).toContain(`1 of ${order.length}`);
+    await press('j');
+    expect(url()).toBe(`/issue/${order[1]}`);
+    await press('Escape');
+    expect(url()).toBe('/team/web/list?status=todo');
+    expect(cursorKey()).toBe(order[1]);
+    expect(ui.getAllByRole('option', { states: ['selected'] })).toHaveLength(1);
+  });
+
+  it('leaves the keys to the title and the description while either has the caret', async () => {
+    await mount('/team/web/list');
+    await press('Enter');
+    const here = url();
+    ui.fireEvent.focus(ui.getByRole('textbox', { name: 'Title' }));
+    await settle();
+    ui.fireEvent.type('jk');
+    await settle();
+    expect(url()).toBe(here);
+    expect(editorFor(ui.getByRole('textbox', { name: 'Title' })).text).toContain('jk');
+    // Escape is the title's: it puts the title back, and stays.
+    await press('Escape');
+    expect(url()).toBe(here);
+    expect(editorFor(ui.getByRole('textbox', { name: 'Title' })).text).not.toContain('jk');
+
+    // The description's first block: the editor's text fields come after the title's.
+    ui.fireEvent.focus(ui.getAllByRole('textbox')[1]!);
+    await settle();
+    await press('j');
+    await press('Escape');
+    expect(url()).toBe(here);
+    // With the caret out of every field, Escape goes back.
+    ui.fireEvent.blur();
+    await press('Escape');
+    expect(url()).toBe('/team/web/list');
+  });
+
+  it('closes an open menu or the palette with Escape before it leaves the page', async () => {
+    await mount('/team/web/list');
+    await press('Enter');
+    const here = url();
+    ui.fireEvent.click(ui.getByRole('combobox', { name: 'Priority' }));
+    await settle();
+    expect(ui.getByRole('listbox')).toBeDefined();
+    await press('Escape');
+    expect(url()).toBe(here);
+    await press('k', { ctrl: true });
+    expect(ui.getByRole('dialog')).toBeDefined();
+    await press('Escape');
+    expect(url()).toBe(here);
+  });
+
+  it("steps through the issue's team list when it wasn't opened from a list", async () => {
+    await mount('/issue/WEB-12');
+    const order = webOrder();
+    const at = order.indexOf('WEB-12');
+    expect(position()).toBe('Web › Issues');
+    expect(textOf(ui.getByRole('group', { name: 'Web › Issues' }))).toContain(`${at + 1} of ${order.length}`);
+    await press('j');
+    expect(url()).toBe(`/issue/${order[at + 1]}`);
+    await press('Escape');
+    expect(url()).toBe('/team/web/list');
+    expect(cursorKey()).toBe(order[at + 1]);
+  });
+
+  it('goes back to the board with its cursor on the card shown last', async () => {
+    await mount('/team/web/board');
+    const board = () => ui.getByRole('group', { name: 'Board' });
+    await press('j');
+    await press('Enter');
+    const opened = url().slice('/issue/'.length);
+    await press('j');
+    const stepped = url().slice('/issue/'.length);
+    expect(stepped).not.toBe(opened);
+    expect(ui.getByRole('group', { name: 'Web › Board' })).toBeDefined();
+    await press('Escape');
+    expect(url()).toBe('/team/web/board');
+    const active = ui.getSemantics(board()).activeDescendant;
+    const card = ui.getAllByRole('listitem').find(node => node.id === active)!;
+    expect(ui.getSemantics(card).label).toMatch(new RegExp(`^${stepped} `));
+    expect(ui.runtime.input.focus.focusedNode).toBe(board());
   });
 });

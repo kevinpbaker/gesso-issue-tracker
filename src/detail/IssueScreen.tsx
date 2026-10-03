@@ -9,7 +9,12 @@ import { NARROW } from '../app/AppShell';
 import { useCopyIssue, type CopyWhat } from '../app/copyIssue';
 import { routeParam } from '../app/params';
 import { ShortcutsService } from '../app/ShortcutsService';
+import { placeOf } from '../app/TopBar';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
+import { arrange, shownBy } from '../issues/IssueList';
+import { ListPlaces, type StepOrigin } from '../issues/ListPlaces';
+import { teamQuery } from '../issues/listScreens';
+import { Views } from '../views/ViewsContract';
 import { CommandsService } from '../palette/CommandsService';
 import { COPY_LINK, copyCommands, propertyCommands } from '../palette/propertyCommands';
 import { Recent } from '../recent/RecentContract';
@@ -17,6 +22,7 @@ import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
 import { IssueDetailChannel, type IssueDetail, type IssueRef, type LinkKind } from './IssueDetailContract';
+import { Steps, type StepPosition } from './StepsContract';
 
 /**
  * `/issue/:key`: one issue, every part of it editable in place.
@@ -30,6 +36,10 @@ import { IssueDetailChannel, type IssueDetail, type IssueRef, type LinkKind } fr
  * editor again. The sidebar's first row copies the issue's link or its
  * key, and Mod+Shift+C copies the link from anywhere on the page.
  *
+ * j and k step to the next and previous issue of the list it was opened
+ * from, as that list shows them, and Escape goes back to that list with
+ * its cursor on the issue shown last (`useSteps`).
+ *
  * The detail channel holds whichever issue was asked for last, so the
  * screen filters it to its own question: an answer for a different key
  * is a stale one, and a frame of the previous issue's title is a flicker.
@@ -39,6 +49,9 @@ export function IssueScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const channel = ctx.channel(IssueDetailChannel);
   const key = routeParam(router, 'key').pipe(map(value => value ?? ''));
   ctx.effect(key, asked => channel.send.open(asked));
+  // Stepping from issue to issue keeps this screen; leaving it stops the app worker counting.
+  const steps = ctx.channel(Steps);
+  ctx.onUnmount(() => steps.send.stop());
 
   const detail = combineLatest([key, channel.view.detail]).pipe(
     filter(([asked, answer]) => answer !== null && answer.asked === asked),
@@ -104,6 +117,7 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   const opened = inputs.detail.value.issue;
   // A view, for the palette's recent issues.
   if (opened !== null) ctx.channel(Recent).send.viewed(opened.key);
+  const steps = useSteps(ctx, opened);
 
   // The description saves a moment after typing stops, and when focus
   // leaves the editor; whatever is pending goes then, once.
@@ -145,7 +159,13 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
       width={percent(100)}
       modifiers={[
         breakpoint({ at: [NARROW], props: { 0: { gap: 16, padding: 16 }, [NARROW]: { gap: 32, padding: 32 } } }),
-        shortcut({ registry, keys: 'Mod+Shift+C', label: COPY_LINK, scoped: false, group: opened?.key, run: () => copy('link') })
+        shortcut({ registry, keys: 'Mod+Shift+C', label: COPY_LINK, scoped: false, group: opened?.key, run: () => copy('link') }),
+        // Bare keys, so the registry leaves them to the title, the
+        // editors and every other text field while one has the caret;
+        // and an open menu or picker takes its own Escape first.
+        shortcut({ registry, keys: 'j', label: 'Next issue', scoped: false, group: opened?.key, run: () => steps.step(1) }),
+        shortcut({ registry, keys: 'k', label: 'Previous issue', scoped: false, group: opened?.key, run: () => steps.step(-1) }),
+        shortcut({ registry, keys: 'Escape', label: 'Back to the list', scoped: false, group: opened?.key, run: () => steps.back() })
       ]}>
       {/* Focus starts here when the issue opens: a screen reader reads the
           issue, single-letter shortcuts still work (it isn't a field), and
@@ -162,7 +182,12 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
         focusable={true}
         tabStop={false}
         modifiers={[autoFocus()]}>
-        <Breadcrumbs detail={detail} open={open} />
+        <row gap={12} y="center" flexWrap="wrap">
+          <box flexGrow={1} flexShrink={1} minWidth={0}>
+            <Breadcrumbs detail={detail} open={open} />
+          </box>
+          <Stepper at={steps.at} name={steps.name} onStep={steps.step} />
+        </row>
         <TitleField issue={issue} onSave={title => update({ title }, 'Renamed')} />
         {outside.pipe(
           map((text, round) => (
@@ -190,6 +215,136 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
         <CommentBox />
       </column>
       <Properties detail={detail} update={update} copy={copy} />
+    </row>
+  );
+}
+
+/**
+ * The issue page's place in a list: where the issue is in the list it
+ * was opened from, a step either way, and the way back.
+ *
+ * The list is the one looked at last (`ListPlaces.origin`), if the
+ * issue is in it. If it isn't, or there's none (the page was opened
+ * from its url, from the palette on another team's list, or from a
+ * related issue the list leaves out), it's the issue's own team list,
+ * as that list was last arranged. That always has the issue, so j, k
+ * and Escape always do something, and the indicator names which list
+ * it is, rather than the controls coming and going with how the page
+ * was reached.
+ *
+ * A step replaces the url rather than pushing it: Back goes to where
+ * the page was opened from, not through every issue stepped past.
+ */
+function useSteps(ctx: ComponentContext, opened: Issue | null) {
+  const router = ctx.inject(RouterService);
+  const places = ctx.inject(ListPlaces);
+  const channel = ctx.channel(Steps);
+  const meta = ctx.channel(WorkspaceMeta);
+  const views = ctx.channel(Views);
+
+  const teamUrl = opened === null ? '/' : `/team/${opened.teamId}/list`;
+  const team = (): StepOrigin => {
+    const place = places.get(teamUrl);
+    const base = teamQuery(opened?.teamId ?? '');
+    const chosen = {
+      group: place?.group ?? null,
+      sort: place?.sort ?? null,
+      collapsed: place !== undefined && place.shown === shownBy(base) ? place.collapsed : []
+    };
+    return { url: teamUrl, list: { kind: 'list', query: arrange(base, chosen) } };
+  };
+  const from = places.origin;
+  const lists: StepOrigin[] = from === null || from.url === teamUrl ? [from ?? team()] : [from, team()];
+  if (opened !== null) channel.send.follow({ key: opened.key, lists: lists.map(origin => origin.list) });
+
+  // Where this issue is, once the app worker has said: until then, j
+  // and k wait rather than step from the issue before. What's drawn is
+  // the last answer, so the indicator doesn't blink out between steps.
+  const at = channel.view.at;
+  let current: StepPosition | null = null;
+  ctx.effect(at, position => (current = position !== null && position.key === opened?.key ? position : null));
+
+  return {
+    at,
+    /** What the list is called, as the top bar calls it. */
+    name: combineLatest([at, meta.view.teams, meta.view.projects, views.view.views]).pipe(
+      map(([position, teams, projects, saved]) => (position === null ? '' : placeOf(lists[position.list]?.url ?? '', { teams, projects }, saved).title))
+    ),
+    step: (by: 1 | -1): void => {
+      const to = by === 1 ? current?.next : current?.previous;
+      if (current === null || to === undefined || to === null) return;
+      // Stepped from here, the list stepped through is the one to go on in.
+      places.origin = lists[current.list] ?? null;
+      router.navigate(`/issue/${to}`, { replace: true });
+    },
+    back: (): void => {
+      const origin = current === null ? lists[0]! : (lists[current.list] ?? lists[0]!);
+      const path = origin.url.split('?')[0]!;
+      if (current !== null && origin.list.kind === 'board' && current.spot !== null) places.landOnBoard(path, current.spot);
+      else if (current !== null && origin.list.kind === 'list') places.land(path, current.index);
+      router.navigate(origin.url);
+    }
+  };
+}
+
+/**
+ * "3 of 1,240", and the buttons j and k press. Not drawn until the app
+ * worker has answered. The buttons are the pointer's:
+ * Tab goes past them, on from the issue to its title, since the
+ * keyboard has j and k.
+ */
+function Stepper(inputs: Inputs<{ at: StepPosition | null; name: string; onStep: (by: 1 | -1) => void }>, _ctx: ComponentContext) {
+  const count = (n: number) => n.toLocaleString('en-US');
+  return (
+    <row>
+      {inputs.at.pipe(
+        map(at => at !== null),
+        distinctUntilChanged(),
+        map(known =>
+          known
+            ? [
+                <row key="steps" gap={4} y="center" role="group" label={inputs.name.pipe(map(name => (name === '' ? 'This list' : name)))}>
+                  <text
+                    text={inputs.at.pipe(map(at => (at === null ? '' : `${at.within ? count(at.index + 1) : '–'} of ${count(at.total)}`)))}
+                    label={combineLatest([inputs.at, inputs.name]).pipe(
+                      map(([at, name]) =>
+                        at === null
+                          ? ''
+                          : at.within
+                            ? `Issue ${count(at.index + 1)} of ${count(at.total)}${name === '' ? '' : ` in ${name}`}`
+                            : `No longer in ${name === '' ? 'this list' : name}, which has ${count(at.total)} issues`
+                      )
+                    )}
+                    fontSize={12}
+                    color="textMuted"
+                    maxLines={1}
+                    paddingRight={4}
+                  />
+                  <Button
+                    size="small"
+                    variant="plain"
+                    label="Previous issue"
+                    tabStop={false}
+                    description="K"
+                    disabled={inputs.at.pipe(map(at => at?.previous == null))}
+                    onClick={() => inputs.onStep.value(-1)}>
+                    <text text="↑" fontSize={13} color="textMuted" />
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="plain"
+                    label="Next issue"
+                    tabStop={false}
+                    description="J"
+                    disabled={inputs.at.pipe(map(at => at?.next == null))}
+                    onClick={() => inputs.onStep.value(1)}>
+                    <text text="↓" fontSize={13} color="textMuted" />
+                  </Button>
+                </row>
+              ]
+            : []
+        )
+      )}
     </row>
   );
 }

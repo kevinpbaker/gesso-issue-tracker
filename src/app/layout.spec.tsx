@@ -5,6 +5,7 @@ import { createComponent, ServiceRegistry, type ComponentContext, type Inputs } 
 import { renderTest, serveForTest } from 'gesso-testing';
 
 import { ShortcutsService } from './ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { WorkspaceMeta } from './WorkspaceContract';
 import { workspaceSource } from './workspaceSource';
 import { Board } from '../board/BoardContract';
@@ -52,6 +53,7 @@ it('keeps a five-column board inside its pane', async () => {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   const ui = renderTest(createComponent(Repro), { channels: served.registry, width: 600, height: 400, services });
   await ui.settle();
   await served.settle();

@@ -18,6 +18,7 @@ import { seedWorkspace } from '../model/seed';
 import { CommandsService } from '../palette/CommandsService';
 import { Views } from '../views/ViewsContract';
 import { ShortcutsService } from './ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { UndoToast } from './UndoToast';
 import { WorkspaceMeta } from './WorkspaceContract';
 import { workspaceSource } from './workspaceSource';
@@ -79,6 +80,7 @@ async function mount(): Promise<void> {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(CommandsService);
   const ui = renderTest(createComponent(Shell), { channels: served.registry, width: 1200, height: 700, services });
   h = { ui, served, store, service };

@@ -18,6 +18,7 @@ import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { PriorityIcon } from '../ui/PriorityIcon';
 import { Probe } from '../ui/probe';
 import { Issues, type IssueRow, type IssuesSummary } from './IssuesContract';
+import { ListPlaces } from './ListPlaces';
 import { triageKeys } from './triageKeys';
 
 /**
@@ -30,6 +31,11 @@ import { triageKeys } from './triageKeys';
  * Every row is the same height, so the window and "scroll this row into
  * view" are both arithmetic, and a jump anywhere in 50,000 issues lands
  * exactly.
+ *
+ * The cursor, the scroll and the toolbar's arrangement are kept in
+ * `ListPlaces` as the list closes and put back as it opens, so a list
+ * left for an issue comes back as it was, with the cursor on the issue
+ * the issue page showed last.
  *
  * The keys are Linear's: j and k (or the arrows) move, Shift extends,
  * x selects, Enter opens, Escape clears, Mod+A selects everything; and
@@ -81,6 +87,33 @@ export function positionOf(summary: IssuesSummary, index: number): number {
   return at;
 }
 
+/**
+ * The query a list runs: its screen's, as the toolbar rearranged it,
+ * narrowed by the url. The issue page builds a list's query the same
+ * way, to step through it as the list would show it.
+ */
+export function arrange(
+  base: IssueQuery,
+  chosen: { readonly group: GroupField | null; readonly sort: SortField | null; readonly collapsed: readonly string[] },
+  narrowed: IssueFilter = {}
+): IssueQuery {
+  return {
+    ...base,
+    ...(isEmptyFilter(narrowed) ? {} : { refine: narrowed }),
+    group: chosen.group ?? base.group,
+    sort:
+      chosen.sort === null
+        ? base.sort
+        : { field: chosen.sort, direction: chosen.sort === 'updatedAt' || chosen.sort === 'createdAt' ? 'desc' : 'asc' },
+    collapsed: chosen.collapsed
+  };
+}
+
+/** Which issues a list shows, as a string to compare: its filters, not how they're arranged. */
+export function shownBy(base: IssueQuery, narrowed: IssueFilter = {}): string {
+  return JSON.stringify([base.filter, base.also ?? [], isEmptyFilter(narrowed) ? {} : narrowed]);
+}
+
 const GROUPS: { value: GroupField; label: string }[] = [
   { value: 'state', label: 'Status' },
   { value: 'assignee', label: 'Assignee' },
@@ -103,10 +136,13 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
   const router = ctx.inject(RouterService);
   const { registry } = ctx.inject(ShortcutsService);
 
+  const places = ctx.inject(ListPlaces);
   const cursor = internalState(0);
   let anchor = 0;
   const scrollY = internalState(0);
-  const probe = new Probe();
+  /** An issue the list was asked to open on, until it can be scrolled to: it needs the result and the list's height. */
+  let landing: number | null = null;
+  const probe = new Probe(() => land());
 
   // The route supplies the filter and a default arrangement; the toolbar
   // can rearrange it without changing which issues are in the list.
@@ -157,26 +193,69 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     router.navigate(formatUrl(match.path, filterToQuery(next)), { replace: true });
   };
   const query = combineLatest([inputs.query, group, sort, collapsed, refine]).pipe(
-    map(([base, chosenGroup, chosenSort, folded, narrowed]): IssueQuery => ({
-      ...base,
-      ...(isEmptyFilter(narrowed) ? {} : { refine: narrowed }),
-      group: chosenGroup ?? base.group,
-      sort:
-        chosenSort === null
-          ? base.sort
-          : { field: chosenSort, direction: chosenSort === 'updatedAt' || chosenSort === 'createdAt' ? 'desc' : 'asc' },
-      collapsed: folded
-    })),
+    map(([base, chosenGroup, chosenSort, folded, narrowed]) => arrange(base, { group: chosenGroup, sort: chosenSort, collapsed: folded }, narrowed)),
     distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))
   );
-  ctx.effect(query, next => issues.send.setQuery(next));
-  // A different filter is a different list: start at its top.
-  ctx.effect(combineLatest([inputs.query.pipe(map(q => [q.filter, q.also])), refine]).pipe(distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))), () => {
-    cursor.value = 0;
-    anchor = 0;
-    collapsed.value = [];
-    scrollY.value = 0;
+  // Where this list was left, kept under its path; the refinement in
+  // the query string is part of which issues it shows.
+  const path = router.match.pipe(
+    map(match => match?.path ?? ''),
+    distinctUntilChanged()
+  );
+  const shown = combineLatest([inputs.query, refine]).pipe(
+    map(([base, narrowed]) => shownBy(base, narrowed)),
+    distinctUntilChanged()
+  );
+  let here: string | null = null;
+  let showing = '';
+  const keep = (): void => {
+    if (here === null) return;
+    places.save(here, {
+      shown: showing,
+      group: group.value,
+      sort: sort.value,
+      collapsed: collapsed.value,
+      cursor: cursor.value,
+      scrollY: scrollY.value
+    });
+  };
+  ctx.onUnmount(keep);
+  // Opened, or walked to another team's list: the place it was left in,
+  // if it still shows the same issues. A different filter on the same
+  // list is a different list: start at its top.
+  ctx.effect(combineLatest([path, shown]), ([at, which]) => {
+    const arriving = at !== here;
+    if (arriving) keep();
+    const place = arriving ? places.get(at) : undefined;
+    if (arriving) {
+      group.value = place?.group ?? null;
+      sort.value = place?.sort ?? null;
+    }
+    const back = place !== undefined && place.shown === which;
+    here = at;
+    showing = which;
+    cursor.value = back ? place.cursor : 0;
+    collapsed.value = back ? place.collapsed : [];
+    scrollY.value = back ? place.scrollY : 0;
+    landing = arriving ? (places.takeLanding(at) ?? null) : null;
+    if (landing !== null) cursor.value = landing;
+    anchor = cursor.value;
+    land();
   });
+  ctx.effect(query, next => {
+    issues.send.setQuery(next);
+    // What the issue page steps through, and where its Escape comes back to.
+    places.origin = { url: router.match.value?.url ?? '', list: { kind: 'list', query: next } };
+  });
+  // The issue page said where it was last: the cursor goes there, and
+  // the list scrolls as little as it can from where it was to show it.
+  ctx.effect(issues.view.summary, () => land());
+  function land(): void {
+    const box = probe.box();
+    if (landing === null || box === null || box.height === 0 || landing >= total()) return;
+    reveal(landing);
+    landing = null;
+  }
 
   let start = -1;
   const report = (offsetY: number): void => {
@@ -187,20 +266,20 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     const index = located?.kind === 'issue' ? located.index : (located?.group.start ?? first);
     issues.send.setWindow({ start: Math.max(0, index - 2), end: index + VISIBLE });
   };
-  // The top of any list is index 0, whether a group header or an issue
-  // sits there, so the first window needs nothing from the summary.
-  start = 0;
-  issues.send.setWindow({ start: 0, end: VISIBLE });
+  // The window where the list was left: the top, for a list new to this visit.
+  report(scrollY.value);
 
   /** Scrolls just enough to show an issue's row. */
-  const reveal = (index: number): void => {
+  function reveal(index: number): void {
     const top = positionOf(issues.view.summary.value, index) * ROW;
     const height = probe.box()?.height ?? 600;
     if (top < scrollY.value) scrollY.value = top;
     else if (top + ROW > scrollY.value + height) scrollY.value = top + ROW - height;
-  };
+  }
 
-  const total = () => issues.view.summary.value.total;
+  function total(): number {
+    return issues.view.summary.value.total;
+  }
   const move = (by: number, extend: boolean): void => {
     if (total() === 0) return;
     const next = Math.max(0, Math.min(total() - 1, cursor.value + by));

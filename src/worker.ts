@@ -19,7 +19,9 @@ import { NewIssueService } from './compose/NewIssueService';
 import { WorkspaceMeta } from './app/WorkspaceContract';
 import { Board } from './board/BoardContract';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
+import { Steps } from './detail/StepsContract';
 import { Issues } from './issues/IssuesContract';
+import { ListPlaces } from './issues/ListPlaces';
 
 renderRoot(AppRoot)
   .useChannel(WorkspaceMeta)
@@ -27,6 +29,7 @@ renderRoot(AppRoot)
   .useChannel(Board)
   .useChannel(Issues)
   .useChannel(IssueDetailChannel)
+  .useChannel(Steps)
   .useChannel(Compose)
   .useChannel(Views)
   .useChannel(Palette)
@@ -34,4 +37,5 @@ renderRoot(AppRoot)
   .useService(ShortcutsService)
   .useService(NewIssueService)
   .useService(CommandsService)
+  .useService(ListPlaces)
   .useRoutes({ routes: ROUTES, notFound: TeamIssues });

@@ -5,6 +5,7 @@ import { createComponent, OverlayService, ServiceRegistry, type ComponentContext
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
@@ -80,6 +81,7 @@ async function mount(disk = new MemoryDisk(), store = new IssueStore(seedWorkspa
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(NewIssueService);
   const ui = renderTest(createComponent(Shell), { channels: served.registry, width: 1000, height: 900, services });
   h = { ui, served, store, compose };

@@ -172,30 +172,33 @@ export function createBoardStore(store: IssueStore) {
     )
   );
 
+  const people = new Map(workspace.users.map(user => [user.id, user.name]));
+  const projects = new Map(workspace.projects.map(project => [project.id, project.name]));
+  const laneLabel = (key: string): string => {
+    if (key === ALL_LANE) return 'All issues';
+    if (key === NO_LANE) return laneField === 'assignee' ? 'No assignee' : 'No project';
+    return (laneField === 'assignee' ? people.get(key) : projects.get(key)) ?? key;
+  };
+  /** The lanes there are, top to bottom: by name, with the lane for nobody last. */
+  const laneKeys = (): string[] => {
+    const keys = new Set<string>();
+    for (const key of cells.keys()) keys.add(key.slice(0, key.lastIndexOf('|')));
+    if (laneField === 'none') keys.add(ALL_LANE);
+    return [...keys].sort((a, b) => (a === NO_LANE ? 1 : b === NO_LANE ? -1 : laneLabel(a).localeCompare(laneLabel(b))));
+  };
+
   const lanes = combineLatest([revisions, shape]).pipe(
-    map((): readonly LaneRow[] => {
-      const keys = new Set<string>();
-      for (const key of cells.keys()) keys.add(key.slice(0, key.lastIndexOf('|')));
-      if (laneField === 'none') keys.add(ALL_LANE);
-      const people = new Map(workspace.users.map(user => [user.id, user.name]));
-      const projects = new Map(workspace.projects.map(project => [project.id, project.name]));
-      const label = (key: string): string => {
-        if (key === ALL_LANE) return 'All issues';
-        if (key === NO_LANE) return laneField === 'assignee' ? 'No assignee' : 'No project';
-        return (laneField === 'assignee' ? people.get(key) : projects.get(key)) ?? key;
-      };
-      return [...keys]
-        .map(key => {
-          const counts: Record<string, number> = {};
-          let total = 0;
-          for (const stateId of stateIds) {
-            counts[stateId] = sizeOf(key, stateId);
-            total += counts[stateId]!;
-          }
-          return { key, label: label(key), counts, total };
-        })
-        .sort((a, b) => (a.key === NO_LANE ? 1 : b.key === NO_LANE ? -1 : a.label.localeCompare(b.label)));
-    })
+    map((): readonly LaneRow[] =>
+      laneKeys().map(key => {
+        const counts: Record<string, number> = {};
+        let total = 0;
+        for (const stateId of stateIds) {
+          counts[stateId] = sizeOf(key, stateId);
+          total += counts[stateId]!;
+        }
+        return { key, label: laneLabel(key), counts, total };
+      })
+    )
   );
 
   const slots = combineLatest([windows, revisions, content]).pipe(
@@ -299,6 +302,20 @@ export function createBoardStore(store: IssueStore) {
     },
     undo(): void {
       store.undo();
+    },
+    /**
+     * Every card, in the order the board is read as a list: lane by
+     * lane, and in each lane column by column, top to bottom. What the
+     * issue page's j and k step through after a card is opened.
+     */
+    cardsInOrder(): readonly { readonly id: string; readonly lane: string; readonly stateId: string; readonly index: number }[] {
+      const out: { id: string; lane: string; stateId: string; index: number }[] = [];
+      for (const lane of laneKeys()) {
+        for (const stateId of stateIds) {
+          (cells.get(cellKey(lane, stateId)) ?? []).forEach((id, index) => out.push({ id, lane, stateId, index }));
+        }
+      }
+      return out;
     },
     /** For specs and the keyboard: the IDs of a cell, in order. */
     orderOf(stateId: string, lane: string = ALL_LANE): readonly string[] {

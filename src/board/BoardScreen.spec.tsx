@@ -5,6 +5,7 @@ import { createComponent, ServiceRegistry, type ComponentContext, type Inputs } 
 import { renderTest, serveForTest, textProperty, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueQueryService } from '../issues/IssueQueryService';
@@ -56,6 +57,7 @@ async function mount(): Promise<void> {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1600, height: 900, services });
   h = { ui, served, store, board };
   await settle();

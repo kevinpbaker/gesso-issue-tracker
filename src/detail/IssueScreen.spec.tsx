@@ -1,3 +1,4 @@
+import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { editorFor, percent, shortcuts, type UiNode } from 'gesso-core';
@@ -6,11 +7,14 @@ import { createComponent, route, RouterService, ServiceRegistry, type ComponentC
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { CommandsService } from '../palette/CommandsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
+import { runQuery } from '../model/query';
 import { seedWorkspace } from '../model/seed';
+import { teamQuery } from '../issues/listScreens';
 import type { Issue } from '../model/types';
 import { Recent } from '../recent/RecentContract';
 import { RecentStore } from '../recent/RecentStore';
@@ -19,6 +23,11 @@ import { IssueDetailChannel } from './IssueDetailContract';
 import { IssueDetailService } from './IssueDetailService';
 import { IssueScreen } from './IssueScreen';
 import { detailSource } from './detailSource';
+import { StepService } from './StepService';
+import { Steps } from './StepsContract';
+import { stepsSource } from './stepsSource';
+import { createBoardStore } from '../board/BoardStore';
+import { Views } from '../views/ViewsContract';
 
 /**
  * The issue page from the keyboard: Phase 6. Every property is set
@@ -64,10 +73,13 @@ async function mount(store: IssueStore, key: string): Promise<void> {
   const served = serveForTest([
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
     { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) },
-    { token: Recent, source: recentSource(recent) }
+    { token: Recent, source: recentSource(recent) },
+    { token: Steps, source: stepsSource(new StepService(store, createBoardStore(store))) },
+    { token: Views, source: { view: { views: of([]), saved: of(null) }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(CommandsService);
   const ui = renderTest(createComponent(Page), { channels: served.registry, width: 1400, height: 1400, services });
   // The shell's half of a copy, as the main thread does it.
@@ -282,6 +294,23 @@ describe('the issue page', () => {
     h.ui.runtime.services.get(RouterService).navigate('/issue/web-12');
     await settle();
     expect(h.recent.keys.value).toEqual(['WEB-12', 'WEB-13']);
+  });
+
+  it("names where it is in its team's list, and steps with buttons named for j and k", async () => {
+    const store = fresh();
+    const order = runQuery(store.workspace, store.issues(), teamQuery('web')).ids.map(id => store.get(id)!.key);
+    await mount(store, order[5]!);
+    const steps = h.ui.getByRole('group', { name: 'Web › Issues' });
+    expect(h.ui.getByText(`6 of ${order.length}`)).toBeDefined();
+    expect(h.ui.getSemantics(h.ui.getByText(`6 of ${order.length}`)).label).toBe(`Issue 6 of ${order.length} in Web › Issues`);
+    const next = h.ui.getByRole('button', { name: 'Next issue' });
+    expect(h.ui.getSemantics(next).description).toBe('J');
+    expect(h.ui.getSemantics(h.ui.getByRole('button', { name: 'Previous issue' })).description).toBe('K');
+    expect(steps).toBeDefined();
+    h.ui.fireEvent.click(next);
+    await settle();
+    expect(h.ui.runtime.services.get(RouterService).url.value).toBe(`/issue/${order[6]}`);
+    expect(h.ui.getByText(`7 of ${order.length}`)).toBeDefined();
   });
 
   it('says so when no issue has the key', async () => {

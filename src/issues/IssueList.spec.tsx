@@ -6,6 +6,7 @@ import { createComponent, route, RouterService, ServiceRegistry, type ComponentC
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { ListPlaces } from './ListPlaces';
 import { CommandsService } from '../palette/CommandsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
@@ -66,6 +67,7 @@ async function mount(): Promise<void> {
   // Registered before the runtime builds the root, as the worker's `useService` does.
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(ListPlaces);
   services.register(CommandsService);
   const ui = renderTest(createComponent(Harness), {
     channels: served.registry,
@@ -391,6 +393,7 @@ describe('the Phase 8 budget', () => {
     ]);
     const services = new ServiceRegistry();
     services.register(ShortcutsService);
+    services.register(ListPlaces);
     services.register(CommandsService);
     const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1000, height: 600, services });
     h = { ui, served, store, service, views };

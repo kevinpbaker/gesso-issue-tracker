@@ -1,11 +1,12 @@
 import { combineLatest, type Observable } from 'rxjs';
-import { distinctUntilChanged, map } from 'rxjs/operators';
+import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
 import { autoFocus, dragSource, draggable, dropTarget, focusRing, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Select } from 'gesso-components';
-import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { FocusService, internalState, RouterService, type ComponentContext, type Inputs, type RouteMatch } from 'gesso-framework';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { ListPlaces } from '../issues/ListPlaces';
 import { triageKeys } from '../issues/triageKeys';
 import { Probe } from '../ui/probe';
 import { ALL_LANE, Board, cellKey, slotKey, type CardRow, type LaneField, type LaneRow } from './BoardContract';
@@ -27,6 +28,10 @@ import { ALL_LANE, Board, cellKey, slotKey, type CardRow, type LaneField, type L
  *
  * The list's triage keys work on the card under the cursor: s, a, p and
  * i, and Shift+L for labels, since l is the next column here.
+ *
+ * A card opened is stepped from with the issue page's j and k, through
+ * the board read column by column; Escape there comes back to the board
+ * with the cursor on the card shown last (`ListPlaces`).
  */
 
 /**
@@ -226,6 +231,16 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
     state.cursor.value = null;
     state.picked.value = null;
     state.hint.value = null;
+  });
+
+  // What the issue page steps through, and where its Escape comes back
+  // to: this board, with the cursor on the card it last showed.
+  const places = ctx.inject(ListPlaces);
+  const mine = router.match.value?.route;
+  ctx.effect(router.match.pipe(filter((match): match is RouteMatch => match !== null && match.route === mine)), match => {
+    places.origin = { url: match.url, list: { kind: 'board' } };
+    const landing = places.takeBoardLanding(match.path);
+    if (landing !== undefined) state.cursor.value = landing;
   });
 
   return (

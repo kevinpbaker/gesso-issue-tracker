@@ -20,11 +20,14 @@ import { IssueList } from './IssueList';
  * new query without being rebuilt.
  */
 
+/** A team's list, before the toolbar or the url rearranges or narrows it. */
+export function teamQuery(teamId: string): IssueQuery {
+  return { ...DEFAULT_QUERY, filter: { teamIds: [teamId] } };
+}
+
 export function TeamIssuesScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const router = ctx.inject(RouterService);
-  const query = routeParam(router, 'key').pipe(
-    map((key): IssueQuery => ({ ...DEFAULT_QUERY, filter: { teamIds: [key ?? 'web'] } }))
-  );
+  const query = routeParam(router, 'key').pipe(map(key => teamQuery(key ?? 'web')));
   return <IssueList query={query} empty="This team has no issues" />;
 }
 

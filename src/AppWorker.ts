@@ -25,6 +25,9 @@ import { createBoardStore } from './board/BoardStore';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
 import { IssueDetailService } from './detail/IssueDetailService';
 import { detailSource } from './detail/detailSource';
+import { StepService } from './detail/StepService';
+import { Steps } from './detail/StepsContract';
+import { stepsSource } from './detail/stepsSource';
 import { SearchIndex } from './search/SearchIndex';
 import { Views } from './views/ViewsContract';
 import { ViewsStore } from './views/ViewsStore';
@@ -58,6 +61,8 @@ const compose = new ComposeService(store, disk, ME);
 const views = new ViewsStore(disk);
 const recent = new RecentStore(disk);
 const palette = new PaletteService(store, () => recent.keys.value);
+const board = createBoardStore(store);
+const steps = new StepService(store, board, search);
 
 const reset = (): void => {
   store.reset();
@@ -67,9 +72,10 @@ const reset = (): void => {
 serveChannels([
   { token: WorkspaceMeta, source: workspaceSource(store.workspace, ME) },
   { token: Preferences, source: preferencesSource(preferences) },
-  { token: Board, source: boardSource(createBoardStore(store)) },
+  { token: Board, source: boardSource(board) },
   { token: Issues, source: issuesSource(new IssueQueryService(store, search), store, reset) },
   { token: IssueDetailChannel, source: detailSource(detail) },
+  { token: Steps, source: stepsSource(steps) },
   {
     token: Compose,
     source: {
