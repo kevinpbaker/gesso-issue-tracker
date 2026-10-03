@@ -19,7 +19,8 @@ Gesso feels at least as good as a DOM one, the "only good for exotic
 demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
-**Status:** Phases 0 to 8 are done. Phase 9 is next.
+**Status:** Phases 0 to 8 are done. Phase 9 is done except for its
+screen reader runs, which need a person (see ACCESSIBILITY.md).
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -109,6 +110,20 @@ out precisely where and why.
   in 18.8 ms in the test runtime (query, channel, layout and paint), and
   every live shortcut and the selection's commands are found in the
   palette, which runs them.
+- **Phase 9 (all but the screen reader runs):** `pnpm check:a11y`
+  checks every route against Chrome's accessibility tree and Tab, with
+  the reports committed in `accessibility/`. The list is a multi-select
+  listbox with the cursor as its active descendant, the board a group
+  with its keys described, and the sidebar links with the open page
+  current. A keyboard pass found and fixed every place focus went
+  nowhere: focus starts on the page's content, and a control that
+  removes itself hands focus on. At 320 CSS pixels (400% zoom) the
+  layout reflows: the sidebar moves behind a Menu button and an
+  issue's properties go under it. The theme follows the system's
+  contrast preference; nothing in the tracker moves on its own. Seven
+  Gesso fixes came out of it (33 to 39 in GESSO-ISSUES.md). Still to
+  do: the VoiceOver and NVDA runs, with the script in
+  `ACCESSIBILITY.md`, and fixing whatever blocking problems they find.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's

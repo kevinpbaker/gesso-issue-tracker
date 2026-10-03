@@ -4,13 +4,15 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `1d61bae`. Not yet pushed or released. Every
+per fix, `2c572e3` through `8fb3607` (another session's commits are
+interleaved in the same range). Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 32) were checked with their packages'
+build. The ones since (16 to 39) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
-in the same checkout fails the full check for now.
+in the same checkout fails the full check for now. After 39, the whole
+test suite passed: 4,664 tests.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -437,6 +439,94 @@ of mostly empty panel when they held a few rows: a scroll view with a
 
 **Fix:** its content's size within its bounds (`1d61bae`).
 
+### 33. A document was a Tab stop per paragraph
+
+**What:** each block of the editor is a field of one editing group, and
+Tab stopped at every one of them: a long description was two hundred
+stops to get past.
+
+**Fix:** an editing group is one Tab stop, entered at the field last
+focused (`839011e`).
+
+### 34. A hidden toolbar was still a run of Tab stops
+
+**What:** the list's selection toolbar, hidden until something was
+selected, kept its controls in the Tab order, where they were reached
+and seen by no one.
+
+**Fix:** a hidden (`visible={false}`) or disabled subtree has no stops,
+and `focus()` refuses a node inside one (`2ce079c`).
+
+### 35. Nothing said the person wanted more contrast
+
+**What:** a canvas gets nothing from forced colours, and Gesso had
+`withContrast` but no way to hear `prefers-contrast: more` or
+`forced-colors: active`.
+
+**Fix:** `ShellService.contrast`, `'high'` or `'standard'`, kept up to
+date from the main thread in both shells (`62883e0`).
+
+### 36. A flex base taken from content went stale
+
+**What:** switching to the high-contrast theme halved the tracker's top
+bar. The shell's main pane took its flex base from its content, read
+while the list's `height: 100%` had nothing to resolve against; the
+next measure resolved it and made the list's column a relayout
+boundary, so when rows arrived the base was never read again. Any full
+layout (a theme change, a resize) then gave a different answer from the
+frame before. Found with the contrast check, and found to be the real
+layout only once fixed: the tracker's fill regions now have
+`flexBasis={0}`, as CSS's `flex: 1` would.
+
+**Fix:** an item whose flex base is its content tells its subtree that
+its content matters, and a scroll view without a size of its own passes
+on its own answer (`1de054a`). The flex docs say what a content basis
+costs.
+
+### 37. A list couldn't say its selection is a set
+
+**What:** the issue list selects rows with `x` and Shift, as a set, but
+said `aria-multiselectable` nowhere, so Chrome took the row under the
+active descendant to be the selected one and said so.
+
+**Fix:** a `multiselectable` semantic state; a Combobox with `multiple`
+uses it (`99538fa`).
+
+### 38. Nothing could say which link is the current page
+
+**What:** the sidebar marked the open page `selected`, which a screen
+reader ignores on a link or a button. Gesso's own `Pagination` did the
+same, and said in a comment that it was for want of anything better.
+
+**Fix:** a `current` semantic state, mirrored as `aria-current`, and
+`Pagination` uses it (`8fb3607`).
+
+### 39. An application-wide Enter took the key from a focused button
+
+**What:** Enter on the list's Clear selection opened the issue under the
+cursor and cleared nothing. A keyboard press on a button is a default
+action, applied after the key has been through the shortcut registry,
+so the list's Enter shortcut got it first.
+
+**Fix:** a bare Enter or Space isn't a shortcut while a button or link
+has focus, unless it's that control's own (`7753bdc`).
+
+### Tooling
+
+- **The accessibility check is a library** (`937f1d7`), so the tracker
+  runs the same check the playground does. Its fixes, found running it
+  on the tracker:
+  - it refuses a port already in use (`8839b2b`), after it checked the
+    wrong app;
+  - a composite widget's items and disabled controls aren't Tab failures
+    (`c5b8e25`);
+  - a document's fields are reached as one (`0d64fbc`);
+  - two controls with one name are told apart (`dd22046`);
+  - a relation such as `activedescendant` prints the node it points at,
+    not `undefined` (`b67b85b`).
+- **The focus docs** said there was no `:focus-visible` after describing
+  it; the stale paragraph is gone (`238d96b`).
+
 ## Not a bug, now documented
 
 - **Undo in a multi-block editor.** `historyUndo` and `historyRedo`
@@ -447,6 +537,10 @@ of mostly empty panel when they held a few rows: a scroll view with a
 - **A scroll row's content set its parent's minimum width.** That's
   flexbox's automatic minimum, as in CSS, and `minWidth={0}` is the
   answer.
+- **`visible={false}` keeps its space.** It's CSS's `visibility:
+  hidden`, not `display: none`; the tracker's selection toolbar left 53
+  blank pixels under the list until it was taken out of the tree
+  instead. The properties reference already says so.
 
 ## Still open
 
