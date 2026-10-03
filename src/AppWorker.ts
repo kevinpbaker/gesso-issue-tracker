@@ -24,6 +24,8 @@ import { createBoardStore } from './board/BoardStore';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
 import { IssueDetailService } from './detail/IssueDetailService';
 import { detailSource } from './detail/detailSource';
+import { Compose } from './compose/ComposeContract';
+import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
 import { Issues } from './issues/IssuesContract';
 import { issuesSource } from './issues/issuesSource';
@@ -41,6 +43,7 @@ const store = new IssueStore(seedWorkspace({ seed: SEED, issues: ISSUES }), SEED
 const persistence = new OverlayPersistence(disk);
 const preferences = new PreferencesStore(disk);
 const detail = new IssueDetailService(store, ME);
+const compose = new ComposeService(store, disk, ME);
 
 const reset = (): void => {
   store.reset();
@@ -62,8 +65,21 @@ serveChannels([
   },
   { token: Board, source: boardSource(createBoardStore(store)) },
   { token: Issues, source: issuesSource(new IssueQueryService(store), store, reset) },
-  { token: IssueDetailChannel, source: detailSource(detail) }
+  { token: IssueDetailChannel, source: detailSource(detail) },
+  {
+    token: Compose,
+    source: {
+      view: { draft: compose.draft, filed: compose.filed },
+      commands: {
+        save: draft => compose.save(draft),
+        file: draft => compose.file(draft),
+        discard: () => compose.discard()
+      }
+    }
+  }
 ]);
+
+void compose.restore();
 
 void preferences.restore();
 
@@ -76,4 +92,7 @@ void persistence.restore(store).then(outcome => {
   persistence.watch(store);
 });
 
-self.addEventListener('beforeunload', () => void persistence.flush());
+self.addEventListener('beforeunload', () => {
+  void persistence.flush();
+  void compose.flush();
+});

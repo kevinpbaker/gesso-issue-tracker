@@ -8,6 +8,8 @@ import { RouterService, ShellService, type ComponentContext, type Inputs, type O
 import { Issues } from '../issues/IssuesContract';
 import { Preferences, type ThemeChoice } from './PreferencesContract';
 import { ShortcutsService } from './ShortcutsService';
+import { NewIssueDialog } from '../compose/NewIssueDialog';
+import { NewIssueService } from '../compose/NewIssueService';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 
@@ -28,6 +30,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   const shell = ctx.inject(ShellService);
   const router = ctx.inject(RouterService);
   const { registry } = ctx.inject(ShortcutsService);
+  const newIssue = ctx.inject(NewIssueService);
 
   const theme = resolveTheme(prefs.view.theme, shell.colorScheme).pipe(map(scheme => (scheme === 'dark' ? darkTheme : lightTheme)));
 
@@ -38,6 +41,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
     // minimum, and the pane pushes the top bar's controls off screen.
     <column flexGrow={1} minWidth={0} width={percent(100)} height={percent(100)} x="stretch" role="main" label="Main">
       <TopBar />
+      <NewIssueDialog open={newIssue.open} onClose={() => (newIssue.open.value = false)} />
       <box height={1} backgroundColor="border" />
       {/* minHeight 0 too: without it a page taller than the window sets the
           box's minimum height, and the page's own scroll view never scrolls. */}
@@ -62,7 +66,8 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         global('Mod+\\', 'Show or hide the sidebar', () => prefs.send.setSidebarOpen(!prefs.view.sidebarOpen.value)),
         global('g m', 'Go to my issues', () => router.navigate('/my-issues')),
         global('g l', 'Go to the list', () => router.navigate(`/team/${currentTeam(router)}/list`)),
-        global('g b', 'Go to the board', () => router.navigate(`/team/${currentTeam(router)}/board`))
+        global('g b', 'Go to the board', () => router.navigate(`/team/${currentTeam(router)}/board`)),
+        global('c', 'New issue', () => (newIssue.open.value = true))
       ]}>
       {prefs.view.sidebarOpen.pipe(
         map(open =>

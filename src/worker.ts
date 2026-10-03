@@ -10,6 +10,8 @@ import { renderRoot } from 'gesso-framework';
 import { Preferences } from './app/PreferencesContract';
 import { AppRoot, ROUTES, TeamIssues } from './app/routes';
 import { ShortcutsService } from './app/ShortcutsService';
+import { Compose } from './compose/ComposeContract';
+import { NewIssueService } from './compose/NewIssueService';
 import { WorkspaceMeta } from './app/WorkspaceContract';
 import { Board } from './board/BoardContract';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
@@ -21,5 +23,7 @@ renderRoot(AppRoot)
   .useChannel(Board)
   .useChannel(Issues)
   .useChannel(IssueDetailChannel)
+  .useChannel(Compose)
   .useService(ShortcutsService)
+  .useService(NewIssueService)
   .useRoutes({ routes: ROUTES, notFound: TeamIssues });

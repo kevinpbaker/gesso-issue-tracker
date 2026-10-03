@@ -67,6 +67,10 @@ export class IssueStore {
   private readonly childMap = new Map<string, string[]>();
   private readonly addedRelations: IssueRelation[] = [];
   private readonly removedRelations = new Set<string>();
+  /** The highest number used in each team's keys, so a new issue takes the next. */
+  private readonly lastNumber = new Map<string, number>();
+  /** The smallest rank in each state, so a new issue goes to the top. */
+  private readonly topRank = new Map<string, number>();
   /** IDs of issues that differ from the seed, for the overlay. */
   private readonly touched = new Set<string>();
   private readonly deletedIds = new Set<string>();
@@ -99,9 +103,12 @@ export class IssueStore {
     this.activityMap.clear();
     this.relationMap.clear();
     this.childMap.clear();
+    this.lastNumber.clear();
+    this.topRank.clear();
     for (const issue of workspace.issues) {
       this.issueMap.set(issue.id, issue);
       this.keyMap.set(issue.key, issue.id);
+      this.count(issue);
       if (issue.parentId !== null) {
         this.listOf(this.childMap, issue.parentId).push(issue.id);
       }
@@ -111,6 +118,17 @@ export class IssueStore {
     }
     for (const relation of workspace.relations) {
       this.link(relation);
+    }
+  }
+
+  /** Notes an issue's key number and rank, for the next issue made. */
+  private count(issue: Issue): void {
+    const number = Number(issue.key.slice(issue.key.lastIndexOf('-') + 1));
+    if (number > (this.lastNumber.get(issue.teamId) ?? 0)) {
+      this.lastNumber.set(issue.teamId, number);
+    }
+    if (issue.rank < (this.topRank.get(issue.stateId) ?? Infinity)) {
+      this.topRank.set(issue.stateId, issue.rank);
     }
   }
 
@@ -237,6 +255,34 @@ export class IssueStore {
     return changes.length === 0 ? null : this.commit(label, changes, actorId);
   }
 
+  /**
+   * A new issue, numbered after the team's last and ranked first in its
+   * state, ready for `create`. A number isn't reused once taken, even if
+   * the issue it went to is undone: a key someone saw keeps meaning that
+   * issue.
+   */
+  newIssue(fields: Pick<Issue, 'teamId' | 'title' | 'description' | 'stateId' | 'priority' | 'assigneeId' | 'labelIds'> & Partial<Issue>): Issue {
+    const team = this.workspace.teams.find(entry => entry.id === fields.teamId);
+    if (team === undefined) {
+      throw new Error(`No team '${fields.teamId}'.`);
+    }
+    const number = (this.lastNumber.get(team.id) ?? 0) + 1;
+    this.lastNumber.set(team.id, number);
+    const at = this.clock();
+    return {
+      projectId: null,
+      estimate: null,
+      dueDate: null,
+      parentId: null,
+      ...fields,
+      id: `n-${team.id}-${number}`,
+      key: `${team.key}-${number}`,
+      rank: (this.topRank.get(fields.stateId) ?? 1024) - 1024,
+      createdAt: at,
+      updatedAt: at
+    };
+  }
+
   create(issue: Issue, actorId = 'u0'): Transaction {
     return this.commit(`Created ${issue.key}`, [{ kind: 'create', issue }], actorId);
   }
@@ -328,6 +374,7 @@ export class IssueStore {
         case 'create':
           this.issueMap.set(change.issue.id, change.issue);
           this.keyMap.set(change.issue.key, change.issue.id);
+          this.count(change.issue);
           this.reparent(change.issue.id, null, change.issue.parentId);
           this.touched.add(change.issue.id);
           this.deletedIds.delete(change.issue.id);
@@ -458,6 +505,7 @@ export class IssueStore {
       this.reparent(issue.id, this.issueMap.get(issue.id)?.parentId, issue.parentId);
       this.issueMap.set(issue.id, issue);
       this.keyMap.set(issue.key, issue.id);
+      this.count(issue);
       this.touched.add(issue.id);
     }
     for (const id of overlay.deleted) {

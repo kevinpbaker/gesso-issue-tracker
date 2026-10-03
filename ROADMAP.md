@@ -19,7 +19,7 @@ Gesso feels at least as good as a DOM one, the "only good for exotic
 demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
-**Status:** Phases 0 to 6 are done. Phase 7 is next.
+**Status:** Phases 0 to 7 are done. Phase 8 is next.
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -79,6 +79,20 @@ out precisely where and why.
   The exit criterion is a spec that sets every property, adds a
   sub-issue and a link, writes the description and a comment, all from
   the keyboard, and reloads it unchanged.
+- **Phase 7:** `c` from anywhere, or the top bar's New issue button,
+  opens a dialog (`src/compose/NewIssueDialog.tsx`) whose fields are a
+  Gesso `form()`: the title and team are required, and a failed submit
+  puts the caret in the first wrong field, shows each message under its
+  field and says them in an assertive live region. Mod+Enter files from
+  any field. Every change is the draft, kept in the app worker and saved
+  to disk, so a half-written issue survives closing the dialog and a
+  reload. "Create more" keeps the dialog open after filing, keeping the
+  team, status, priority, assignee and labels and clearing the words;
+  otherwise the dialog closes and a toast names the issue filed. New
+  issues are numbered after their team's last key, never reusing one,
+  and go to the top of their state. The exit criterion is a spec: ten
+  issues in a row with Create more and no mouse, after a validation
+  error that is announced.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -86,7 +100,7 @@ out precisely where and why.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,481 tests in 21 files.
+`pnpm test` runs 1,488 tests in 23 files.
 
 ---
 

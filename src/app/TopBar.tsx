@@ -5,6 +5,7 @@ import { Button, SegmentedControl } from 'gesso-components';
 import { RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { Issues } from '../issues/IssuesContract';
+import { NewIssueService } from '../compose/NewIssueService';
 import { BUILT_IN_VIEWS } from './Sidebar';
 import { WorkspaceMeta, type WorkspaceView } from './WorkspaceContract';
 
@@ -42,6 +43,7 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const router = ctx.inject(RouterService);
   const meta = ctx.channel(WorkspaceMeta);
   const issues = ctx.channel(Issues);
+  const newIssue = ctx.inject(NewIssueService);
 
   const place = new BehaviorSubject<Place>({ title: '', team: null, view: null });
   ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects]), ([url, teams, projects]) =>
@@ -68,6 +70,9 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
             ]}
           />
         </box>
+        <Button label="New issue" description="C" size="small" onClick={() => (newIssue.open.value = true)}>
+          <text text="New issue" fontSize={12} color="background" />
+        </Button>
         <Button
           label={issues.view.undoLabel.pipe(map(label => (label === null ? 'Nothing to undo' : `Undo: ${label}`)))}
           disabled={issues.view.undoLabel.pipe(map(label => label === null))}
