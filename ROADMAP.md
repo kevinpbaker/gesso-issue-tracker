@@ -91,7 +91,7 @@ CI to run in, and the Vercel project.
   to disk, so a half-written issue survives closing the dialog and a
   reload. "Create more" keeps the dialog open after filing, keeping the
   team, status, priority, assignee and labels and clearing the words;
-  otherwise the dialog closes and a toast names the issue filed. New
+  otherwise the dialog closes and the undo toast names the issue filed. New
   issues are numbered after their team's last key, never reusing one,
   and go to the top of their state. The exit criterion is a spec: ten
   issues in a row with Create more and no mouse, after a validation
@@ -141,6 +141,16 @@ CI to run in, and the Vercel project.
   runs the tests, the accessibility reports and the proof against Gesso
   checked out beside the tracker, and `vercel.json` builds the same way;
   neither runs until there's a repository and a Vercel project.
+- **Since:** triage without opening an issue. On the list and the board,
+  s, a, p and i set the status, assignee and priority or take the issue,
+  and l (Shift+L on the board, where l is the next column) adds or
+  removes a label: on the selection, or the issue under the cursor when
+  nothing is selected. Each opens a small picker beside the row or card
+  (`src/ui/Picker.tsx`, type to narrow, Enter to choose) and is one
+  transaction, named by the app worker ("Moved 12 issues to Done").
+  After every change, from anywhere, a toast says what it did and
+  offers Undo; after an undo it says what was undone and offers Redo
+  (`src/app/UndoToast.tsx`). Typing in a description raises none.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -148,7 +158,7 @@ CI to run in, and the Vercel project.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,524 tests in 29 files.
+`pnpm test` runs 1,575 tests in 33 files.
 
 ---
 

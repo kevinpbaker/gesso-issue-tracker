@@ -4,17 +4,17 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `dc7f199` (another session's commits are
+per fix, `2c572e3` through `3ddfcd2` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 52) were checked with their packages'
+build. The ones since (16 to 55) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now. After 51, the whole
-test suite passed: 4,691 tests.
+test suite passed: 4,691 tests; after 55, 4,711.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -654,6 +654,42 @@ request carries an id, the shell answers with `clipboardResult`, and
 `writeClipboard` reports what the async clipboard or the fallback did
 (`dc7f199`). The tracker says "Couldn't copy the link" when it's false.
 
+### 53. A toast couldn't offer Undo, and sat on the selection toolbar
+
+**What:** the undo toast wants a button ("Moved 12 issues to Done",
+Undo), and `Toast` had only the ✕. It was also always pinned 24 px off
+the bottom left corner, which is on top of the list's selection
+toolbar, exactly when a bulk change has just been made from it.
+
+**Fix:** `action` and `onAction` draw a button that acts and closes the
+toast (the timer closing it doesn't act); `placement` and `offset` move
+the pin along the bottom edge (`ede6717`). The tracker's toast sits 72 px
+in, like the tour panel.
+
+### 54. A select's type-ahead also ran the page's shortcut
+
+**What:** with the list's new `l` (labels) shortcut, typing `l` into the
+open "Add a filter" list to reach Label opened the labels picker behind
+it. `Select` used printable keys for type-ahead without consuming them,
+so they bubbled on to the shortcut registry.
+
+**Fix:** the open list keeps every printed character; the closed
+trigger keeps a letter that picks an option and lets the rest through;
+a key held with Mod, Ctrl or Alt is never type-ahead (`6d141a5`).
+
+### 55. A toast mounted open drew in the light theme
+
+**What:** the undo toast mounts a fresh `Toast`, already open, for each
+change, so a screen reader hears each one. In the dark theme it came out
+light. It opened from its placeholder's `ref` before that node had the
+environment (the theme) it would be under: the builder called a ref as
+it reached the prop, before a node built in that pass had its
+environment seeded.
+
+**Fix:** the toast waits for its placeholder (`e958805`), and a `ref` is
+now handed its node after all its props are written and its environment
+is seeded, before modifiers attach (`6d51def`).
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
@@ -680,6 +716,12 @@ request carries an id, the shell answers with `clipboardResult`, and
 - **A scroll row's content set its parent's minimum width.** That's
   flexbox's automatic minimum, as in CSS, and `minWidth={0}` is the
   answer.
+- **A live region speaks its name.** The board's announcements were a
+  `status` labelled "Board announcements", so every move was announced
+  as those two words: a node's name is its `label` when it has one, and
+  the mirror writes a live region's name as its content. The tracker's
+  region has no label now. The accessibility docs still said there were
+  no live regions at all; they describe them now (`3ddfcd2`).
 - **`visible={false}` keeps its space.** It's CSS's `visibility:
   hidden`, not `display: none`; the tracker's selection toolbar left 53
   blank pixels under the list until it was taken out of the tree
