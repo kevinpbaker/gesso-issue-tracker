@@ -1,0 +1,100 @@
+# Continuous integration: the tests, the accessibility reports and the
+# proof budgets, each a job, so a regression in any of them is red.
+#
+# The tracker builds against Gesso's working tree, not a release
+# (package.json's overrides link every gesso-* package to ../gesso), so
+# each job checks Gesso out beside the tracker and builds its packages
+# first. Once the fixes are released, the overrides and that step can go.
+#
+# The runner images ship Google Chrome, which the accessibility check
+# and the proof drive headless.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  checks:
+    name: types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gesso-issue-tracker
+      - uses: actions/checkout@v4
+        with:
+          repository: kevinpbaker/gesso
+          path: gesso
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build Gesso's packages
+        working-directory: gesso
+        run: pnpm install --frozen-lockfile && pnpm --filter './packages/*' build
+      - working-directory: gesso-issue-tracker
+        run: pnpm install --frozen-lockfile
+      - working-directory: gesso-issue-tracker
+        run: pnpm typecheck
+      - working-directory: gesso-issue-tracker
+        run: pnpm test
+
+  accessibility:
+    name: accessibility reports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gesso-issue-tracker
+      - uses: actions/checkout@v4
+        with:
+          repository: kevinpbaker/gesso
+          path: gesso
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build Gesso's packages
+        working-directory: gesso
+        run: pnpm install --frozen-lockfile && pnpm --filter './packages/*' build
+      - working-directory: gesso-issue-tracker
+        run: pnpm install --frozen-lockfile
+      # Fails on drift from the committed reports, an unnamed control,
+      # or a control Tab can't reach. See ACCESSIBILITY.md.
+      - working-directory: gesso-issue-tracker
+        run: pnpm check:a11y
+
+  proof:
+    name: proof budgets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gesso-issue-tracker
+      - uses: actions/checkout@v4
+        with:
+          repository: kevinpbaker/gesso
+          path: gesso
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build Gesso's packages
+        working-directory: gesso
+        run: pnpm install --frozen-lockfile && pnpm --filter './packages/*' build
+      - working-directory: gesso-issue-tracker
+        run: pnpm install --frozen-lockfile
+      # Builds the app and drives it with real input against the three
+      # budgets in ROADMAP.md's "What 'done' looks like".
+      - working-directory: gesso-issue-tracker
+        run: pnpm proof
