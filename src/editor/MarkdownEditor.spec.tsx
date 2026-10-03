@@ -481,6 +481,93 @@ describe('input from an IME', () => {
   });
 });
 
+describe('the exit criterion', () => {
+  /**
+   * Phase 5's exit criterion, as one person at the keyboard: a long bug
+   * report with headings, nested lists, a checklist, a code block, a
+   * link and two mentions, part of it through an IME. It saves to clean
+   * markdown, reloads identically, and survives view source.
+   */
+  it('writes a bug report from the keyboard that saves, reloads and survives view source', async () => {
+    const editing = () => ui.runtime.input.editing;
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    await type('# ');
+    await type('Search stops paging');
+    await press('Enter');
+    await type('Reported by @ada and @kim, see [the log](https://example.com/log).');
+    await press('Enter');
+    await type('## ');
+    await type('Steps');
+    await press('Enter');
+    await type('1. ');
+    await type('Open the search page');
+    await press('Enter');
+    await type('Search for ');
+    editing().compositionStart();
+    editing().compositionUpdate('せいきゅうしょ', 7);
+    editing().compositionEnd('請求書');
+    await ui.settle();
+    await press('Enter');
+    await press('Tab');
+    await type('With **no** filter');
+    await press('Enter');
+    await press('Tab', { shift: true });
+    await type('Press Next three times');
+    await press('Enter');
+    await press('Enter');
+    await type('## ');
+    await type('Checklist');
+    await press('Enter');
+    await type('[ ] ');
+    await type('Reproduced');
+    await press('Enter');
+    await type('Fixed');
+    await press('Enter');
+    await press('Enter');
+    await type('```');
+    await type('const pageSize = 50;');
+    const written = source();
+    expect(written).toBe(
+      [
+        '# Search stops paging',
+        '',
+        'Reported by @ada and @kim, see [the log](https://example.com/log).',
+        '',
+        '## Steps',
+        '',
+        '1. Open the search page',
+        '2. Search for 請求書',
+        '   1. With **no** filter',
+        '3. Press Next three times',
+        '',
+        '## Checklist',
+        '',
+        '- [ ] Reproduced',
+        '- [ ] Fixed',
+        '',
+        '```',
+        'const pageSize = 50;',
+        '```'
+      ].join('\n')
+    );
+
+    // Through view source and back, unchanged.
+    await caretIn('Paragraph', 0, 4);
+    await press('m', { meta: true, shift: true });
+    expect(editorFor(ui.getByLabel('Markdown')).text).toBe(written);
+    await press('m', { meta: true, shift: true });
+    expect(source()).toBe(written);
+
+    // Reloaded, identical.
+    ui.unmount();
+    await mount(written);
+    expect(source()).toBe(written);
+    expect(ui.getAllByRole('textbox', { name: 'Heading level 1' })).toHaveLength(1);
+    expect(ui.getAllByRole('textbox', { name: 'Heading level 2' })).toHaveLength(2);
+  });
+});
+
 describe('a 5,000-line document', () => {
   it('re-measures a handful of nodes per keystroke, and a chunk for an Enter', async () => {
     ui = renderTest(createComponent(MarkdownEditor, { value: bigDocument() }), { width: 900, height: 700 });
