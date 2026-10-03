@@ -140,7 +140,8 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
       <row padding={8} paddingLeft={12} paddingRight={12} borderRadius={8} backgroundColor="surface" borderColor="border" borderWidth={1}>
         <text text={notice.text} fontSize={12} color="text" selectable={false} />
       </row>,
-      { bottom: 24, center: 'x', environment: placeholder }
+      // Clear of the list's selection toolbar (52 px) below it.
+      { bottom: 72, center: 'x', environment: placeholder }
     );
     noteTimer = setTimeout(() => {
       note.hide();
