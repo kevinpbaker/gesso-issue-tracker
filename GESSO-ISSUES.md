@@ -4,7 +4,7 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `aa33728` (another session's commits are
+per fix, `2c572e3` through `fac08c0` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
@@ -15,7 +15,8 @@ build. The ones since (16 to 57) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now. After 51, the whole
 test suite passed: 4,691 tests; after 55, 4,711; after 57, 4,754, with
-the docs build.
+the docs build; after 60, 4,765, with types, API reports and the docs
+check.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -749,6 +750,43 @@ sidebar item says only `x="stretch"`, so its row spans it and the team
 key reaches the far end. Docs: positioning and overlays, "Stacks align
 their children".
 
+### 59. A breakpoint was painted a frame late
+
+**What:** stepping to the next issue flashed. The issue body's
+`breakpoint` gives it 32 px of padding from 720 px of room and 16 below,
+and a freshly mounted body was painted with 16 on its first frame and 32
+on the next, so the page jumped 16 px right and down. A layout listener
+(`breakpoint`, `sizeContainer` and so `Responsive`, `autoFocus`) hears
+the boxes after layout and before paint, but what it wrote was laid out
+on the next frame. Its own doc said so.
+
+**Fix:** the runtime lays out again before it paints while the
+listeners leave layout dirty, as a browser does after a `ResizeObserver`
+callback: only what they dirtied, telling only the listeners whose boxes
+then moved, bounded at 8 passes a frame with a console warning once
+past it. A frame whose listeners write nothing that lays out runs one
+pass. A reveal asked for from a listener (`autoFocus`'s) waits for the
+final boxes. `FrameMetrics.layoutPasses` counts the passes (`979053a`).
+Docs: responsive layout, "Listeners that change layout".
+
+### 60. Focus from code always scrolled
+
+**What:** the issue column takes focus as the page opens, so a screen
+reader reads the issue. It's taller than the viewport and starts under
+the page's padding, and every focus that isn't a click is revealed, 8 px
+from the edge and from its top for a tall node, so each issue opened
+scrolled to 8 or 24 px instead of 0. HTML has `element.focus({
+preventScroll: true })` for this; Gesso had nothing.
+
+**Fix:** `autoFocus({ preventScroll: true })`, and the same option on
+`FocusService.focus` and `UiFocusManager.focus`; a key pressed later
+doesn't reveal it either (`fac08c0`). The column uses it, and the issue
+page's scroll view was already one per issue (`7110a76`), so each issue
+stepped to starts at 0 and stays there. Spec: `shell.spec.tsx`, "starts
+each issue stepped to at its top, drawn where it stays from its first
+frame", which reads every frame from the step on. Docs: focus and
+traps, "Autofocus".
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
@@ -764,6 +802,9 @@ their children".
     not `undefined` (`b67b85b`).
 - **The focus docs** said there was no `:focus-visible` after describing
   it; the stale paragraph is gone (`238d96b`).
+- **The API report churned on every build**: a short export such as
+  `fr` showed as its bundler alias, and entries' imports kept their
+  chunk's hash (`fa8deba`).
 
 ## Not a bug, now documented
 

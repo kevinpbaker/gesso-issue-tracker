@@ -175,7 +175,9 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
       ]}>
       {/* Focus starts here when the issue opens: a screen reader reads the
           issue, single-letter shortcuts still work (it isn't a field), and
-          Tab goes on to the title. Not a stop of its own. */}
+          Tab goes on to the title. Not a stop of its own. Without scrolling:
+          revealing the column, which starts under the page's padding, left
+          the page a few pixels down instead of at its top. */}
       <column
         flexGrow={1}
         flexShrink={1}
@@ -187,7 +189,7 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
         label={issue.pipe(map(i => `${i.key} ${i.title}`))}
         focusable={true}
         tabStop={false}
-        modifiers={[autoFocus()]}>
+        modifiers={[autoFocus({ preventScroll: true })]}>
         <row gap={12} y="center" flexWrap="wrap">
           <box flexGrow={1} flexShrink={1} minWidth={0}>
             <Breadcrumbs detail={detail} open={open} />

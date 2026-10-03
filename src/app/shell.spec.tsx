@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { darkTheme, editorFor, lightTheme } from 'gesso-core';
-import { createComponent, RouterService, ServiceRegistry, ShellService } from 'gesso-framework';
+import { darkTheme, editorFor, lightTheme, UiNodeType, type UiNode } from 'gesso-core';
+import { createComponent, FocusService, RouterService, ServiceRegistry, ShellService } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { Board } from '../board/BoardContract';
@@ -366,6 +366,54 @@ describe('stepping through a list from an issue, and back', () => {
     expect(url()).toBe('/team/web/list?status=todo');
     expect(cursorKey()).toBe(order[1]);
     expect(ui.getAllByRole('option', { states: ['selected'] })).toHaveLength(1);
+  });
+
+  it('starts each issue stepped to at its top, drawn where it stays from its first frame', async () => {
+    await mount('/team/web/list');
+    const order = webOrder();
+    await press('j');
+    await press('Enter');
+    const column = (): UiNode => ui.runtime.services.get(FocusService).focused.value!;
+    const page = (): UiNode => {
+      let node: UiNode | null = column();
+      while (node !== null && node.type !== UiNodeType.ScrollView) node = node.parent;
+      return node!;
+    };
+    /** One frame at a time, as a person would see them, from the step until the page is quiet. */
+    async function watch(step: () => void, key: string) {
+      const seen: { scroll: number; column: { x: number; y: number }; body: { x: number; y: number } }[] = [];
+      step();
+      for (let i = 0; i < 40; i++) {
+        await served.settle();
+        ui.frame();
+        if (!url().endsWith(`/${key}`) || !(ui.getSemantics(column()).label ?? '').startsWith(`${key} `)) continue;
+        const body = ui.getLayout(column().parent!);
+        const box = ui.getLayout(column());
+        seen.push({ scroll: ui.explain(page()).scroll!.scrollY, column: { x: box.x, y: box.y }, body: { x: body.x, y: body.y } });
+      }
+      return seen;
+    }
+    /** Down the page, as far as a wheel takes it. */
+    async function scrollDown(): Promise<void> {
+      const box = ui.getVisibleBox(page());
+      ui.fireEvent.wheel({ x: box.x + box.width / 2, y: box.y + 200, deltaY: 600 });
+      await settle();
+      expect(ui.explain(page()).scroll!.scrollY).toBeGreaterThan(0);
+    }
+
+    await scrollDown();
+    const clicked = await watch(() => ui.fireEvent.click(ui.getByRole('button', { name: 'Next issue' })), order[2]!);
+    await scrollDown();
+    const pressed = await watch(() => ui.fireEvent.press('j'), order[3]!);
+    for (const frames of [clicked, pressed]) {
+      expect(frames.length).toBeGreaterThan(0);
+      // At the top from the first frame it's drawn on, and nothing
+      // moves after it: no 16 px jump as the wide band's padding
+      // arrives, no scroll as focus lands on the column.
+      for (const frame of frames) expect(frame).toEqual(frames[0]);
+      expect(frames[0]!.scroll).toBe(0);
+      expect(frames[0]!.column).toEqual({ x: frames[0]!.body.x + 32, y: frames[0]!.body.y + 32 });
+    }
   });
 
   it('leaves the keys to the title and the description while either has the caret', async () => {
