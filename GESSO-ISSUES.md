@@ -735,6 +735,20 @@ The tracker's `inlineRuns` takes `hideMarkers`, and each block hides
 its markers until it has focus. A screen reader still hears the
 markers, since the proxy holds the whole text; Phase 9.
 
+### 58. A button put its content at the top left
+
+**What:** the sidebar's links are 30 pixel `<button>`s holding a row of
+text, and the row sat at the top of each one: off centre under every
+hover and on the current page. A `<button>` stacked its children as a
+`<box>` does, from its origin, while an HTML button and Gesso's own
+`Button` centre their label. Nothing said so where it bit.
+
+**Fix:** a `<button>` centres its children both ways unless `x` or `y`
+says otherwise; a box still starts at the top left (`20ac739`). The
+sidebar item says only `x="stretch"`, so its row spans it and the team
+key reaches the far end. Docs: positioning and overlays, "Stacks align
+their children".
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
