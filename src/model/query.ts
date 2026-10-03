@@ -30,7 +30,19 @@ export interface IssueFilter {
    * without one, the text is matched against the key and the title.
    */
   readonly text?: string;
+  /**
+   * Due dates, relative to today, so a view saved as "overdue" goes on
+   * meaning overdue: past due and not closed; due today; due within the
+   * next seven days; with no due date.
+   */
+  readonly due?: DuePreset;
+  /** Updated within this many days. */
+  readonly updatedWithin?: number;
+  /** Created within this many days. */
+  readonly createdWithin?: number;
 }
+
+export type DuePreset = 'overdue' | 'today' | 'week' | 'none';
 
 export type SortField = 'rank' | 'priority' | 'updatedAt' | 'createdAt' | 'key' | 'title';
 export type GroupField = 'none' | 'state' | 'assignee' | 'priority' | 'project' | 'team';
@@ -41,6 +53,22 @@ export interface IssueQuery {
   readonly group: GroupField;
   /** Group keys whose issues are left out of `ids`; the group itself, and its count, stay. */
   readonly collapsed?: readonly string[];
+  /**
+   * A second filter an issue must also match: what a person narrowed a
+   * screen down to, on top of the screen's own (its team, its project,
+   * its view). Kept apart so it can live in the url and be cleared
+   * without touching what the screen is.
+   */
+  readonly refine?: IssueFilter;
+}
+
+/** What a query needs from the world around it: the text index, and what today is. */
+export interface QueryContext {
+  readonly search?: TextSearch;
+  /** Now, in epoch milliseconds. */
+  readonly now?: number;
+  /** Today's date, `YYYY-MM-DD`, in the reader's time zone. */
+  readonly today?: string;
 }
 
 export const DEFAULT_QUERY: IssueQuery = {
@@ -84,7 +112,8 @@ function haystack(issue: Issue): string {
 /** Full-text search: the IDs of the issues matching some text, or null when the text has no words. */
 export type TextSearch = (text: string) => ReadonlySet<string> | null;
 
-function matcher(filter: IssueFilter, search?: TextSearch): (issue: Issue) => boolean {
+function matcher(filter: IssueFilter, context: QueryContext, closed: ReadonlySet<string>): (issue: Issue) => boolean {
+  const { search } = context;
   const set = (values: readonly (string | number)[] | undefined) =>
     values === undefined || values.length === 0 ? null : new Set<string | number>(values);
   const teams = set(filter.teamIds);
@@ -95,6 +124,26 @@ function matcher(filter: IssueFilter, search?: TextSearch): (issue: Issue) => bo
   const priorities = set(filter.priorities);
   const text = filter.text?.trim().toLowerCase() ?? '';
   const found = text === '' || search === undefined ? null : search(text);
+  const now = context.now ?? Date.now();
+  const today = context.today ?? new Date(now).toISOString().slice(0, 10);
+  const weekOut = addDays(today, 7);
+  const due = filter.due;
+  const dueMatches = (issue: Issue): boolean => {
+    switch (due) {
+      case undefined:
+        return true;
+      case 'none':
+        return issue.dueDate === null;
+      case 'overdue':
+        return issue.dueDate !== null && issue.dueDate < today && !closed.has(issue.stateId);
+      case 'today':
+        return issue.dueDate === today;
+      case 'week':
+        return issue.dueDate !== null && issue.dueDate >= today && issue.dueDate <= weekOut;
+    }
+  };
+  const updatedSince = filter.updatedWithin === undefined ? -Infinity : now - filter.updatedWithin * 86_400_000;
+  const createdSince = filter.createdWithin === undefined ? -Infinity : now - filter.createdWithin * 86_400_000;
 
   return issue =>
     (teams === null || teams.has(issue.teamId)) &&
@@ -103,7 +152,10 @@ function matcher(filter: IssueFilter, search?: TextSearch): (issue: Issue) => bo
     (projects === null || projects.has(issue.projectId ?? NONE)) &&
     (priorities === null || priorities.has(issue.priority)) &&
     (labels === null || issue.labelIds.some(id => labels.has(id))) &&
-    (text === '' || (found !== null ? found.has(issue.id) : search === undefined && haystack(issue).includes(text)));
+    (text === '' || (found !== null ? found.has(issue.id) : search === undefined && haystack(issue).includes(text))) &&
+    dueMatches(issue) &&
+    issue.updatedAt >= updatedSince &&
+    issue.createdAt >= createdSince;
 }
 
 interface Grouping {
@@ -186,8 +238,12 @@ function comparator(field: SortField): (a: Issue, b: Issue) => number {
   }
 }
 
-export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: IssueQuery, search?: TextSearch): QueryResult {
-  const matches = matcher(query.filter, search);
+export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: IssueQuery, context: QueryContext | TextSearch = {}): QueryResult {
+  const world: QueryContext = typeof context === 'function' ? { search: context } : context;
+  const closed = new Set(workspace.states.filter(state => state.type === 'completed' || state.type === 'canceled').map(state => state.id));
+  const own = matcher(query.filter, world, closed);
+  const refined = query.refine === undefined ? null : matcher(query.refine, world, closed);
+  const matches = refined === null ? own : (issue: Issue) => own(issue) && refined(issue);
   const group = grouping(query.group, workspace);
   const compare = comparator(query.sort.field);
   const sign = query.sort.direction === 'asc' ? 1 : -1;
@@ -237,4 +293,9 @@ export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: I
   }
 
   return { ids, groups };
+}
+
+/** A `YYYY-MM-DD` date some days on. */
+function addDays(day: string, days: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }

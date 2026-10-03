@@ -2,7 +2,7 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { percent, shortcuts } from 'gesso-core';
-import { createComponent, ServiceRegistry, type ComponentContext, type Inputs } from 'gesso-framework';
+import { createComponent, route, RouterService, ServiceRegistry, type ComponentContext, type Inputs } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
@@ -137,5 +137,54 @@ describe('display positions', () => {
       const at = locate(summary, positionOf(summary, index));
       expect(at).toEqual({ kind: 'issue', index });
     }
+  });
+});
+
+describe('the filter bar', () => {
+  const router = () => h.ui.runtime.services.get(RouterService);
+  const total = () => h.service.query.value;
+
+  async function at(url: string): Promise<void> {
+    await mount();
+    router().setRoutes({ routes: [route({ path: '/team/:key/list', component: Harness })] });
+    router().navigate(url);
+    await settle();
+  }
+
+  it('reads the filter from the url, and shows a control for each part of it', async () => {
+    await at('/team/web/list?status=todo,in-progress&priority=1');
+    expect(total().refine).toEqual({ stateIds: ['todo', 'in-progress'], priorities: [1] });
+    expect(h.ui.getByRole('group', { name: 'Status filter' })).toBeDefined();
+    expect(h.ui.getByRole('listitem', { name: 'In Progress' })).toBeDefined();
+    expect(h.ui.getByRole('listitem', { name: 'Urgent' })).toBeDefined();
+  });
+
+  it('writes a search to the url once typing stops, and filters by it', async () => {
+    await at('/team/web/list');
+    h.ui.fireEvent.focus(h.ui.getByRole('textbox', { name: 'Search issues' }));
+    h.ui.fireEvent.type('webhook');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await settle();
+    expect(router().url.value).toBe('/team/web/list?q=webhook');
+    expect(total().refine).toEqual({ text: 'webhook' });
+  });
+
+  it('adds a filter from the menu, from the keyboard, and takes it off again', async () => {
+    await at('/team/web/list');
+    h.ui.fireEvent.focus(h.ui.getByRole('combobox', { name: 'Add a filter' }));
+    await press('Enter');
+    await press('l');
+    await press('Enter');
+    // The new control has the caret.
+    const labels = h.ui.getByRole('combobox', { name: 'Label' });
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(labels);
+    h.ui.fireEvent.type('bug');
+    await settle();
+    await press('Enter');
+    expect(router().url.value).toBe('/team/web/list?label=l0');
+    h.ui.fireEvent.click(h.ui.getByRole('button', { name: 'Remove the label filter' }));
+    await settle();
+    expect(router().url.value).toBe('/team/web/list');
+    expect(total().refine).toBeUndefined();
   });
 });

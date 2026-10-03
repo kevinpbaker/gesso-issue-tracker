@@ -43,7 +43,8 @@ export class IssueQueryService {
 
   constructor(
     private readonly store: IssueStore,
-    private readonly search?: SearchIndex
+    private readonly search?: SearchIndex,
+    private readonly clock: () => number = Date.now
   ) {
     const { workspace } = store;
     this.names = {
@@ -68,7 +69,12 @@ export class IssueQueryService {
     this.result = combineLatest([this.query, store.version]).pipe(
       map(([query]): QueryResult => {
         const started = performance.now();
-        const result = runQuery(workspace, store.issues(), query, this.search === undefined ? undefined : text => this.search!.search(text));
+        const now = this.clock();
+        const result = runQuery(workspace, store.issues(), query, {
+          search: this.search === undefined ? undefined : text => this.search!.search(text),
+          now,
+          today: localDay(now)
+        });
         this.last = result;
         this.lastMs = Math.round((performance.now() - started) * 10) / 10;
         return result;
@@ -132,7 +138,8 @@ export class IssueQueryService {
     // A different filter is a different list, and a selection made in
     // the old one would act on issues nobody can see. Sorting, grouping
     // and folding keep it: the same issues, arranged differently.
-    if (JSON.stringify(query.filter) !== JSON.stringify(this.query.value.filter)) {
+    const shown = (q: IssueQuery) => JSON.stringify([q.filter, q.refine ?? {}]);
+    if (shown(query) !== shown(this.query.value)) {
       this.clearSelection();
     }
     this.query.next(query);
@@ -206,4 +213,10 @@ export class IssueQueryService {
       updatedAt: issue.updatedAt
     };
   }
+}
+
+/** The date in the local time zone, `YYYY-MM-DD`: what "today" means to the person looking. */
+function localDay(time: number): string {
+  const date = new Date(time);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

@@ -103,6 +103,33 @@ function fastest(run: () => void, times = 3): number {
   return best;
 }
 
+describe('refining and dates', () => {
+  it('needs both the screen’s filter and the refinement', () => {
+    const result = run({ group: 'none', filter: { teamIds: ['web'] }, refine: { priorities: [1] } });
+    const issues = issuesOf(result.ids);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every(i => i.teamId === 'web' && i.priority === 1)).toBe(true);
+  });
+
+  it('reads due dates against today, and leaves closed issues out of overdue', () => {
+    const today = '2026-04-01';
+    const due = (preset: 'overdue' | 'today' | 'week' | 'none') =>
+      issuesOf(runQuery(small, small.issues, { ...DEFAULT_QUERY, group: 'none', filter: { due: preset } }, { today, now: Date.parse(`${today}T12:00:00Z`) }).ids);
+    expect(due('overdue').every(i => i.dueDate! < today && i.stateId !== 'done')).toBe(true);
+    expect(due('overdue').length).toBeGreaterThan(0);
+    expect(due('week').every(i => i.dueDate! >= today && i.dueDate! <= '2026-04-08')).toBe(true);
+    expect(due('none').every(i => i.dueDate === null)).toBe(true);
+    expect(due('none').length + small.issues.filter(i => i.dueDate !== null).length).toBe(small.issues.length);
+  });
+
+  it('keeps what changed or was made within some days', () => {
+    const now = Date.UTC(2026, 6, 1);
+    const recent = issuesOf(runQuery(small, small.issues, { ...DEFAULT_QUERY, group: 'none', filter: { updatedWithin: 30 } }, { now }).ids);
+    expect(recent.length).toBeGreaterThan(0);
+    expect(recent.every(i => i.updatedAt >= now - 30 * 86_400_000)).toBe(true);
+  });
+});
+
 describe('the Phase 1 budget', () => {
   const big = seedWorkspace({ issues: 50_000 });
 

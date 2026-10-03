@@ -3,11 +3,13 @@ import { distinctUntilChanged, map } from 'rxjs/operators';
 
 import { interactive, LazyColumn, percent, scrollPosition, shortcut } from 'gesso-core';
 import { Button, Select } from 'gesso-components';
-import { internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { ShortcutsService } from '../app/ShortcutsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
-import type { GroupField, IssueQuery, QueryGroup, SortField } from '../model/query';
+import type { GroupField, IssueFilter, IssueQuery, QueryGroup, SortField } from '../model/query';
+import { FilterBar } from './FilterBar';
+import { filterFromQuery, filterToQuery, isEmptyFilter } from './filterUrl';
 import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { PriorityIcon } from '../ui/PriorityIcon';
 import { Probe } from '../ui/probe';
@@ -104,9 +106,22 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
   const group = internalState<GroupField | null>(null);
   const sort = internalState<SortField | null>(null);
   const collapsed = internalState<readonly string[]>([]);
-  const query = combineLatest([inputs.query, group, sort, collapsed]).pipe(
-    map(([base, chosenGroup, chosenSort, folded]): IssueQuery => ({
+  // What the person narrowed the list to, kept in the url's query string.
+  const refine = router.match.pipe(
+    map(match => filterFromQuery(match?.query ?? {})),
+    distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))
+  );
+  const setRefine = (next: IssueFilter): void => {
+    const match = router.match.value;
+    if (match === null) return;
+    // Replaced rather than pushed: each keystroke of a search is not a
+    // page to go Back through.
+    router.navigate(formatUrl(match.path, filterToQuery(next)), { replace: true });
+  };
+  const query = combineLatest([inputs.query, group, sort, collapsed, refine]).pipe(
+    map(([base, chosenGroup, chosenSort, folded, narrowed]): IssueQuery => ({
       ...base,
+      ...(isEmptyFilter(narrowed) ? {} : { refine: narrowed }),
       group: chosenGroup ?? base.group,
       sort:
         chosenSort === null
@@ -118,7 +133,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
   );
   ctx.effect(query, next => issues.send.setQuery(next));
   // A different filter is a different list: start at its top.
-  ctx.effect(inputs.query.pipe(distinctUntilChanged((a, b) => JSON.stringify(a.filter) === JSON.stringify(b.filter))), () => {
+  ctx.effect(combineLatest([inputs.query.pipe(map(q => q.filter)), refine]).pipe(distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))), () => {
     cursor.value = 0;
     anchor = 0;
     collapsed.value = [];
@@ -232,6 +247,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
         onGroup={next => (group.value = next)}
         onSort={next => (sort.value = next)}
       />
+      <FilterBar filter={refine} onChange={setRefine} />
       <box height={1} backgroundColor="border" />
       {issues.view.summary.pipe(
         map(summary =>
