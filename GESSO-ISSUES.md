@@ -4,15 +4,17 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `8fb3607` (another session's commits are
-interleaved in the same range). Not yet pushed or released. Every
+per fix, `2c572e3` through `2e3e56d` (another session's commits are
+interleaved in the same range). Not released. Another session working in
+the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
+nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 39) were checked with their packages'
+build. The ones since (16 to 45) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
-in the same checkout fails the full check for now. After 39, the whole
-test suite passed: 4,664 tests.
+in the same checkout fails the full check for now. After 45, the whole
+test suite passed: 4,672 tests.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -510,6 +512,66 @@ so the list's Enter shortcut got it first.
 
 **Fix:** a bare Enter or Space isn't a shortcut while a button or link
 has focus, unless it's that control's own (`7753bdc`).
+
+### 40. Every issue opened scrolled to its bottom
+
+**What:** the issue page focuses the whole issue when it opens, and
+revealing a focused node moved its scroller by the nearer edge, which
+for something taller than the window is its end. Found by the proof
+harness, whose clicks on the description landed on a field that had
+scrolled off the top.
+
+**Fix:** a node bigger than its scroller is aligned by its start unless
+it already fills the view, as CSSOM's `nearest` does (`8c4f475`).
+
+### 41. A list's rows were laid out from the root as it scrolled
+
+**What:** 36's fix marked the subtree of every flex item whose base is
+its content, including a lone item that fills its line, whose base
+can't change anything. The tracker's main region is one, so every row
+its list mounted on a scroll was laid out from 13 levels up. Found by a
+subagent looking into why scrolling felt laggy.
+
+**Fix:** a line's only item that grows and shrinks to fill a definite
+size, with a minimum of its own, doesn't make its content matter
+(`ab0c1a6`).
+
+### 42. Every frame clamped every text field's scroll
+
+**What:** a frame that did any layout clamped the text scroll of every
+editable ever laid out: in the 5,000-line document, five thousand clamps
+for each keystroke, which kept the keypress budget at its edge.
+
+**Fix:** only the fields measured or scrolled in the pass (`0f02fc2`).
+
+### 43. A panel in an empty wrapper was never drawn
+
+**What:** both renderers culled a node by its own box, and its subtree
+with it, though a node that doesn't clip lets its children paint
+anywhere. The tour, an absolute panel inside an empty wrapper at the
+window's edge, was laid out and never drawn.
+
+**Fix:** each record keeps a paint extent, the box grown by whatever
+reaches past it, kept as boxes are written and shifted, and the cull
+reads it (`427ce99`).
+
+### 44. A colour that named nothing painted nothing, silently
+
+**What:** the tracker used `surfaceRaised`, which no theme has, in six
+places: a selected row, the sidebar's open page and its hover, the
+assignee circles, the board's drop highlight and the tour. None of them
+ever painted, and nothing said so.
+
+**Fix:** it warns on the console, once a name (`2e3e56d`). Checked at
+paint, since a theme may add tokens of its own.
+
+### 45. The docs' Pagination example broke with 38
+
+**What:** 38 moved Pagination to `current`, and the docs example's spec
+still expected `selected`; the packages' suites passed, and that one
+wasn't run.
+
+**Fix:** the spec reads `current` (`ba99982`).
 
 ### Tooling
 

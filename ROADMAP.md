@@ -20,7 +20,9 @@ demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
 **Status:** Phases 0 to 8 are done. Phase 9 is done except for its
-screen reader runs, which need a person (see ACCESSIBILITY.md).
+screen reader runs, which need a person (see ACCESSIBILITY.md). Phase
+10 is done except for the parts that publish: a GitHub repository for
+CI to run in, and the Vercel project.
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -124,6 +126,21 @@ screen reader runs, which need a person (see ACCESSIBILITY.md).
   Gesso fixes came out of it (33 to 39 in GESSO-ISSUES.md). Still to
   do: the VoiceOver and NVDA runs, with the script in
   `ACCESSIBILITY.md`, and fixing whatever blocking problems they find.
+- **Phase 10 (all but publishing):** `pnpm proof` builds the app and
+  drives it in headless Chrome with real wheel, pointer and key input,
+  and fails on any of the three budgets. In the last runs: the 12,606-
+  issue board scrolls at 2.2 ms p95 a frame and drags at 2.0 ms;
+  keypress to glyph is 9.4 ms p95 in a description and 9.3 ms in 5,000
+  lines; a filter change across 50,000 issues repaints in 14 to 24 ms.
+  Getting there found an issue opening scrolled to its bottom, a drag
+  jumping its column back to the top, an editor whose every block
+  re-read the whole document on each key, a list scroll laid out from
+  the root, and colours and a panel that never painted; six of those
+  were Gesso's (40 to 45 in GESSO-ISSUES.md). A first visit gets a
+  seven-step guided tour, remembered once done. `.github/workflows/ci.yml`
+  runs the tests, the accessibility reports and the proof against Gesso
+  checked out beside the tracker, and `vercel.json` builds the same way;
+  neither runs until there's a repository and a Vercel project.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
