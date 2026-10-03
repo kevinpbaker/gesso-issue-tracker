@@ -107,8 +107,8 @@ checked by hand in Chrome:
   ranges of the string being typed, so `**bold**`, `_italic_`,
   `` `code` ``, `~~strike~~`, links, `@mentions` and `WEB-1042`
   references render styled as you type them. Gesso requires the spans
-  to spell the text exactly, so the markers stay in the text: muted in
-  the block with the caret, hidden everywhere else (see §4.4).
+  to spell the text exactly, so the markers stay in the text, as hidden
+  runs the caret steps over (see §4.4).
   2,000 random strings confirm the styler always covers the source.
 - **Markdown shortcuts.** `# `, `## `, `- `, `1. `, `[ ] `, `> `,
   three backticks and `---` convert the block as you type them.
@@ -208,11 +208,16 @@ Mounting the 5,000-line document costs one 114 ms frame (layout
   characters stay in the text but take no room, aren't drawn, and the
   caret steps over them as one unit (Gesso issue 57). `inlineRuns`
   takes `hideMarkers`, and `MarkdownEditor`'s `BlockView` hides the
-  markers in every block but the one with focus, which shows them
-  muted, as Obsidian's live preview does. Showing them rewraps that
-  block only. A press into a block lands where it was pressed in the
-  hidden-marker layout, before the markers show; `MarkdownEditor.spec.tsx`
-  ("hidden markers") pins it. Comments (`MarkdownView`) still drop the
+  markers in every block, the one with the caret included, as Linear's
+  editor does. (Showing them in the block with the caret, as Obsidian's
+  live preview does, was tried first and read as the editor showing
+  its workings.) A pair shows until it's finished, so `**bold` reads as
+  typed; Mod+B, I, E, K and Shift+X put formatting on and take it off,
+  and the source view (Mod+Shift+M) is where the markdown itself is
+  edited. A copy writes out the markup around what was selected, since
+  a selection made by what's drawn can end inside a hidden pair
+  (`inlineSlice`). `MarkdownEditor.spec.tsx` ("hidden markers") pins
+  it. Comments (`MarkdownView`) still drop the
   markers outright with `readingRuns`, since nothing there is edited.
 - **Screen readers.** Each block is a labeled textbox ("Heading level
   2", "Task"), which is a reasonable start. A real reader comes in

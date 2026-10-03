@@ -248,11 +248,15 @@ describe('a selection across blocks', () => {
   it('copies part of one block as text, not as the block', async () => {
     await mount('## Big **steps** ahead');
     await caretIn('Heading level 2', 0, 4);
-    for (let i = 0; i < 9; i++) {
+    // Five presses for five letters: the markers are hidden, and each
+    // press steps over the ones in its way.
+    for (let i = 0; i < 5; i++) {
       await press('ArrowRight', { shift: true });
     }
+    // The selection stops short of the hidden closing pair; the copy
+    // writes the bold out whole.
     const state = ui.runtime.editingState!;
-    expect(state.text.slice(state.selectionStart, state.selectionEnd)).toBe('**steps**');
+    expect(state.text.slice(state.selectionStart, state.selectionEnd)).toBe('**steps');
     expect(ui.runtime.editingState?.html).toBe('<p><strong>steps</strong></p>');
   });
 
@@ -335,17 +339,38 @@ describe('hidden markers', () => {
     await ui.settle();
   }
 
-  it('hides the markers of a block without the caret, and shows them in the one with it', async () => {
-    await mount('Some **bold** and `code`\n\nA [link](https://gesso.dev) here');
+  it('hides the markers in every block, the one with the caret too', async () => {
+    await mount('Some **bold** and `code`\n\nA [link](https://gesso.dev) _here_');
     expect(drawn('Paragraph', 0)).toEqual(['Some ', 'bold', ' and ', 'code']);
-    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' here']);
+    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' ', 'here']);
     await caretIn('Paragraph', 1, 0);
-    expect(drawn('Paragraph', 0)).toEqual(['Some ', 'bold', ' and ', 'code']);
-    expect(drawn('Paragraph', 1)).toEqual(['A ', '[', 'link', '](', 'https://gesso.dev', ')', ' here']);
-    // Back to hidden when the caret leaves.
+    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' ', 'here']);
     await press('ArrowUp');
-    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' here']);
-    expect(drawn('Paragraph', 0)).toEqual(['Some ', '**', 'bold', '**', ' and ', '`', 'code', '`']);
+    expect(drawn('Paragraph', 0)).toEqual(['Some ', 'bold', ' and ', 'code']);
+  });
+
+  it('shows a pair until it is finished, and hides it once it is', async () => {
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    await type('a **bold');
+    expect(drawn('Paragraph', 0)).toEqual(['a **bold']);
+    await type('**');
+    expect(drawn('Paragraph', 0)).toEqual(['a ', 'bold']);
+    expect(source()).toBe('a **bold**');
+  });
+
+  it('bolds and unbolds from the keyboard without showing a marker', async () => {
+    await mount('make it ');
+    await caretIn('Paragraph', 0, 'end');
+    await press('b', { meta: true });
+    await type('loud');
+    expect(source()).toBe('make it **loud**');
+    expect(drawn('Paragraph', 0)).toEqual(['make it ', 'loud']);
+    // Selected as drawn, the word comes off again.
+    await caretIn('Paragraph', 0, 'end');
+    for (let i = 0; i < 4; i++) await press('ArrowLeft', { shift: true });
+    await press('b', { meta: true });
+    expect(source()).toBe('make it loud');
   });
 
   it('puts the caret where the press landed in the text as it was drawn, before the markers showed', async () => {
@@ -371,12 +396,11 @@ describe('hidden markers', () => {
     expect(source()).toBe('Some **bold** woXrds\n\nother');
   });
 
-  it('moves over hidden markers from block to block with the arrows, and shows them on arrival', async () => {
+  it('moves over hidden markers from block to block with the arrows, and keeps them hidden', async () => {
     await mount('first\n\n**bold** end');
     await caretIn('Paragraph', 0, 'end');
-    expect(drawn('Paragraph', 1)).toEqual(['bold', ' end']);
     await press('ArrowRight');
-    expect(drawn('Paragraph', 1)).toEqual(['**', 'bold', '**', ' end']);
+    expect(drawn('Paragraph', 1)).toEqual(['bold', ' end']);
     await type('X');
     expect(source()).toBe('first\n\nX**bold** end');
   });

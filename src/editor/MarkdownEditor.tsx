@@ -19,7 +19,7 @@ import { EditingService, FocusService, internalState, type ComponentContext, typ
 import { chunk } from './chunks';
 import { copiedHtml } from './copyHtml';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
-import { inlineRuns } from './inline';
+import { inlineRuns, inlineSlice } from './inline';
 import { makeLink, toggleMark, type Mark } from './formatting';
 import {
   block,
@@ -775,7 +775,10 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     const picked = blocks.value.slice(start.index, end.index + 1).map((current, i, all) => {
       const from = i === 0 ? start.offset : 0;
       const to = i === all.length - 1 ? end.offset : current.text.length;
-      return detached({ ...current, text: current.text.slice(from, to) });
+      // Code is cut as typed; anything else keeps the markup around
+      // what it takes, as the markers aren't drawn to be selected.
+      const text = current.type === 'code' || current.type === 'raw' ? current.text.slice(from, to) : inlineSlice(current.text, from, to);
+      return detached({ ...current, text });
     });
     const only = picked.length === 1 ? blocks.value[start.index]! : null;
     if (only !== null && picked[0]!.text !== only.text && only.type !== 'code' && only.type !== 'raw') {
@@ -1081,14 +1084,12 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
 
   const fontSize = type === 'heading' ? HEADING_SIZES[(current.value.level ?? 1) - 1] : type === 'code' ? 13 : 15;
   const raw = type === 'raw';
-  // The markers show only in the block that has the caret, as in
-  // Obsidian's live preview; everywhere else they are hidden runs, still
-  // in the text. Showing them rewraps this block and no other.
-  const hasCaret = new BehaviorSubject(false);
-  const spans =
-    type === 'code' || raw
-      ? undefined
-      : combineLatest([current, hasCaret]).pipe(map(([b, shown]) => inlineRuns(b.text, { hideMarkers: !shown })));
+  // The markers are hidden runs, still in the text, with or without the
+  // caret: formatting is drawn, never spelled, and Mod+B and the rest
+  // put it on and take it off. A pair shows only while it's unfinished,
+  // so `**bold` reads as typed until the closing pair arrives. The
+  // source view (Mod+Shift+M) is where the markdown itself is edited.
+  const spans = type === 'code' || raw ? undefined : current.pipe(map(b => inlineRuns(b.text, { hideMarkers: true })));
 
   const field = (
     <editabletext
@@ -1105,11 +1106,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       label={label(current.value)}
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}
-      onFocus={() => {
-        hasCaret.next(true);
-        handlers.focused(id);
-      }}
-      onBlur={() => hasCaret.next(false)}
+      onFocus={() => handlers.focused(id)}
       onInput={event => handlers.input(id, event.value, event.selectionEnd)}
       modifiers={[focusRequests({ id, requests, fields })]}
     />

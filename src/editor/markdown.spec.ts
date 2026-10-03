@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { seedWorkspace } from '../model/seed';
-import { covers, inlineRuns, readingRuns } from './inline';
+import { covers, inlineRuns, inlineSlice, readingRuns } from './inline';
 import { block, detached, inputRule, parse, serialize, type Block } from './markdown';
 
 const shape = (blocks: readonly Block[]) => blocks.map(({ id: _id, src: _src, column: _column, ...rest }) => rest);
@@ -169,6 +169,18 @@ describe('inline runs', () => {
     expect(runs.find(run => run.text === 'f')).toMatchObject({ color: 'primary', textDecoration: 'underline' });
     // Unclosed markers are text, not markup, so they stay.
     expect(readingRuns('**open').map(run => run.text).join('')).toBe('**open');
+  });
+
+  it('cuts a slice with the markup that frames what it takes', () => {
+    const source = 'Big **steps** and [docs](https://x.dev) `ok`';
+    // `**steps`, as a selection of the drawn word gives it.
+    expect(inlineSlice(source, 4, 11)).toBe('**steps**');
+    // Part of a construct keeps its markers around the part.
+    expect(inlineSlice(source, 6, 9)).toBe('**ste**');
+    // Markers with none of their text taken are left out.
+    expect(inlineSlice(source, 0, 6)).toBe('Big ');
+    expect(inlineSlice(source, 18, 22)).toBe('[doc](https://x.dev)');
+    expect(inlineSlice(source, 0, source.length)).toBe(source);
   });
 
   it('does not treat snake_case or unclosed markers as emphasis', () => {

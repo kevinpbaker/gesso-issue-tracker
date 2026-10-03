@@ -54,8 +54,7 @@ const OPENERS = /[`*_~[@A-Z]/;
 
 /**
  * The runs for a block's source. `hideMarkers` hides the markup rather
- * than muting it, which is how a block reads while the caret is
- * elsewhere.
+ * than muting it, which is how the editor draws every block.
  */
 export function inlineRuns(source: string, options: { hideMarkers?: boolean } = {}): InlineRun[] {
   const marker: Style = options.hideMarkers === true ? HIDDEN : MARK;
@@ -80,11 +79,13 @@ export function inlineRuns(source: string, options: { hideMarkers?: boolean } = 
         const match = token.pattern.exec(source);
         if (match !== null && match[0].length > 0) {
           flush();
+          const whole = {};
           match.slice(1).forEach((group, index) => {
             if (group !== undefined && group !== '') {
               const style = token.styles[index] === MARK ? marker : token.styles[index];
               const run = { text: group, ...style };
               if (style === marker) markers.add(run);
+              tokens.set(run, whole);
               runs.push(run);
             }
           });
@@ -110,6 +111,41 @@ const markers = new WeakSet<InlineRun>();
  */
 export function readingRuns(source: string): InlineRun[] {
   return inlineRuns(source).filter(run => !markers.has(run));
+}
+
+/** The token each run of a construct belongs to, for `inlineSlice`. */
+const tokens = new WeakMap<InlineRun, object>();
+
+/**
+ * The markdown for `start`..`end` of a block's source, with whatever
+ * markup frames the text it takes. The markers are hidden, so a
+ * selection made by what's drawn can end inside them (`**steps` for
+ * the word "steps"); a construct whose text is taken, in whole or in
+ * part, is written out whole around that part, and markers whose text
+ * is left out are dropped.
+ */
+export function inlineSlice(source: string, start: number, end: number): string {
+  const runs = inlineRuns(source);
+  const taken = new Set<object>();
+  let at = 0;
+  for (const run of runs) {
+    const token = tokens.get(run);
+    if (token !== undefined && !markers.has(run) && at < end && at + run.text.length > start) taken.add(token);
+    at += run.text.length;
+  }
+  let out = '';
+  at = 0;
+  for (const run of runs) {
+    const token = tokens.get(run);
+    const from = at;
+    at += run.text.length;
+    if (markers.has(run)) {
+      if (token !== undefined && taken.has(token)) out += run.text;
+    } else {
+      out += run.text.slice(Math.max(0, start - from), Math.max(0, Math.min(run.text.length, end - from)));
+    }
+  }
+  return out;
 }
 
 /** Whether a set of runs still spells the source, which is the invariant Gesso checks. */

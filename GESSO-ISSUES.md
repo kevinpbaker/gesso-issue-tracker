@@ -731,8 +731,8 @@ caused: the editor shows a block's markers when it takes focus, and a
 click after `**bold** wo` landed between the closing asterisks. The
 press's offset is now read before focus moves (`aa33728`).
 
-The tracker's `inlineRuns` takes `hideMarkers`, and each block hides
-its markers until it has focus. A screen reader still hears the
+The tracker's `inlineRuns` takes `hideMarkers`, and every block hides
+its markers, the one with the caret too. A screen reader still hears the
 markers, since the proxy holds the whole text; Phase 9.
 
 ### 58. A button put its content at the top left
