@@ -6,6 +6,7 @@ import { Select } from 'gesso-components';
 import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { triageKeys } from '../issues/triageKeys';
 import { Probe } from '../ui/probe';
 import { ALL_LANE, Board, cellKey, slotKey, type CardRow, type LaneField, type LaneRow } from './BoardContract';
 
@@ -23,6 +24,9 @@ import { ALL_LANE, Board, cellKey, slotKey, type CardRow, type LaneField, type L
  * down and Escape puts it back. Every step is announced through a
  * live region, and the drop indicator shows where it will land, for
  * the pointer and the keyboard alike.
+ *
+ * The list's triage keys work on the card under the cursor: s, a, p and
+ * i, and Shift+L for labels, since l is the next column here.
  */
 
 /**
@@ -80,7 +84,8 @@ interface BoardState {
 
 /** Where keyboard focus is, when it's on the board. One value, so it's never re-attached. */
 const BOARD_FOCUS = focusRing();
-const BOARD_KEYS = 'Arrows move between cards, Page Up and Page Down between lanes. Space picks a card up and puts it down, Enter opens it.';
+const BOARD_KEYS =
+  'Arrows move between cards, Page Up and Page Down between lanes. Space picks a card up and puts it down, Enter opens it. S sets its status, A its assignee, P its priority, Shift+L its labels, and I assigns it to you.';
 
 export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const board = ctx.channel(Board);
@@ -197,6 +202,24 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
 
   const key = (keys: string, label: string, run: () => void) => shortcut({ registry, keys, label, scoped: false, group: 'Board', run });
 
+  // Not while a card is carried: its move is still being decided.
+  const triage = triageKeys(ctx, {
+    group: 'Board',
+    labelsKey: 'Shift+L',
+    labelsNote: ' (Shift+L, as l is the next column)',
+    target: () => {
+      const at = state.cursor.value;
+      const row = at === null ? undefined : cardAt(at);
+      if (at === null || row === undefined || state.picked.value !== null) return null;
+      return {
+        ids: [row.id],
+        name: row.key,
+        now: { stateId: at.stateId, priority: row.priority, assigneeId: row.assigneeId, labels: row.labels },
+        anchor: state.cards.get(slotKey(at.lane, at.stateId, at.index)) ?? null
+      };
+    }
+  });
+
   // Switching lanes or teams changes every cell, so a cursor or a
   // carried card from the old arrangement points at nothing.
   ctx.effect(board.view.laneField.pipe(distinctUntilChanged()), () => {
@@ -224,7 +247,8 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
         key('PageUp', 'Previous lane', () => step(0, 0, -1)),
         key('Space', 'Pick up or drop the card', pickOrDrop),
         key('Escape', 'Put the card back', cancel),
-        key('Enter', 'Open the card', open)
+        key('Enter', 'Open the card', open),
+        ...triage.modifiers
       ]}>
       <row height={44} paddingLeft={16} paddingRight={16} gap={12} y="center">
         <text
@@ -242,6 +266,7 @@ export function BoardScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
         />
       </row>
       <text text={announcement} role="status" live="polite" label="Board announcements" height={0} opacity={0} />
+      {triage.picker}
       {/* A row that overflows scrolls sideways, so five columns fit any width. */}
       {/* One tab stop: the cards are walked with the cursor, and the one
           under it is the board's active descendant. */}

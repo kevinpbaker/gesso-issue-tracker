@@ -5,10 +5,15 @@ import { createComponent, ServiceRegistry, type ComponentContext, type Inputs } 
 import { renderTest, serveForTest } from 'gesso-testing';
 
 import { ShortcutsService } from './ShortcutsService';
+import { WorkspaceMeta } from './WorkspaceContract';
+import { workspaceSource } from './workspaceSource';
 import { Board } from '../board/BoardContract';
 import { BoardScreen } from '../board/BoardScreen';
 import { boardSource } from '../board/boardSource';
 import { createBoardStore } from '../board/BoardStore';
+import { IssueQueryService } from '../issues/IssueQueryService';
+import { Issues } from '../issues/IssuesContract';
+import { issuesSource } from '../issues/issuesSource';
 import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
 
@@ -39,7 +44,12 @@ function Repro(_i: Inputs<{}>, _c: ComponentContext) {
  */
 it('keeps a five-column board inside its pane', async () => {
   const store = new IssueStore(seedWorkspace({ issues: 200 }));
-  const served = serveForTest([{ token: Board, source: boardSource(createBoardStore(store)) }]);
+  const served = serveForTest([
+    { token: Board, source: boardSource(createBoardStore(store)) },
+    // The board's triage keys go through these.
+    { token: Issues, source: issuesSource(new IssueQueryService(store), store, () => store.reset()) },
+    { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') }
+  ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
   const ui = renderTest(createComponent(Repro), { channels: served.registry, width: 600, height: 400, services });

@@ -5,6 +5,11 @@ import { createComponent, ServiceRegistry, type ComponentContext, type Inputs } 
 import { renderTest, serveForTest, textProperty, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { WorkspaceMeta } from '../app/WorkspaceContract';
+import { workspaceSource } from '../app/workspaceSource';
+import { IssueQueryService } from '../issues/IssueQueryService';
+import { Issues } from '../issues/IssuesContract';
+import { issuesSource } from '../issues/issuesSource';
 import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
 import { Board } from './BoardContract';
@@ -43,7 +48,12 @@ afterEach(() => {
 async function mount(): Promise<void> {
   const store = new IssueStore(seedWorkspace({ issues: 300 }));
   const board = createBoardStore(store);
-  const served = serveForTest([{ token: Board, source: boardSource(board) }]);
+  const served = serveForTest([
+    { token: Board, source: boardSource(board) },
+    // Triage from the board goes through the issues channel, as the list's does.
+    { token: Issues, source: issuesSource(new IssueQueryService(store), store, () => store.reset()) },
+    { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') }
+  ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
   const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1600, height: 900, services });
@@ -57,8 +67,8 @@ async function settle(): Promise<void> {
   await h.ui.settle();
 }
 
-async function press(key: string): Promise<void> {
-  h.ui.fireEvent.press(key);
+async function press(key: string, modifiers: { shift?: boolean } = {}): Promise<void> {
+  h.ui.fireEvent.press(key, modifiers);
   await settle();
 }
 
@@ -110,6 +120,60 @@ describe('the board from the keyboard', () => {
     await mount();
     await press('ArrowDown');
     expect(h.ui.getByRole('status')).toBeTruthy();
+  });
+});
+
+describe('triage from the board', () => {
+  async function type(text: string): Promise<void> {
+    h.ui.fireEvent.type(text);
+    await settle();
+  }
+
+  it('moves the card under the cursor to another status with s, which one undo puts back', async () => {
+    await mount();
+    await press('ArrowDown');
+    const id = h.board.orderOf('backlog')[1]!;
+    const key = h.store.get(id)!.key;
+    await press('s');
+    expect(h.ui.getByRole('dialog', { name: `Set the status of ${key}` })).toBeTruthy();
+    await type('in rev');
+    await press('Enter');
+    expect(h.store.get(id)!.stateId).toBe('in-review');
+    expect(h.store.undoLabel).toBe(`Moved ${key} to In Review`);
+    expect(h.ui.queryByRole('dialog')).toBeNull();
+    h.store.undo();
+    expect(h.store.get(id)!.stateId).toBe('backlog');
+  });
+
+  it('opens labels with Shift+L, because l is the next column', async () => {
+    await mount();
+    const id = h.board.orderOf('backlog')[0]!;
+    await press('L', { shift: true });
+    expect(h.ui.getByRole('dialog', { name: `Add or remove labels on ${h.store.get(id)!.key}` })).toBeTruthy();
+    const label = h.store.workspace.labels.find(entry => !h.store.get(id)!.labelIds.includes(entry.id))!;
+    await type(label.name);
+    await press('Enter');
+    expect(h.store.get(id)!.labelIds).toContain(label.id);
+    // Plain l still moves the cursor.
+    await press('l');
+    expect(said()).toMatch(/^.+\. Todo, 1 of \d+$/);
+    const { registry } = h.ui.runtime.services.get(ShortcutsService);
+    expect(registry.active(null).map(binding => binding.label)).toContain('Add or remove a label (Shift+L, as l is the next column)');
+  });
+
+  it('assigns the card to me with i', async () => {
+    await mount();
+    const id = h.board.orderOf('backlog')[0]!;
+    await press('i');
+    expect(h.store.get(id)!.assigneeId).toBe('u0');
+  });
+
+  it('leaves a carried card alone', async () => {
+    await mount();
+    await press(' ');
+    await press('s');
+    expect(h.ui.queryByRole('dialog')).toBeNull();
+    await press('Escape');
   });
 });
 

@@ -18,6 +18,7 @@ import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { PriorityIcon } from '../ui/PriorityIcon';
 import { Probe } from '../ui/probe';
 import { Issues, type IssueRow, type IssuesSummary } from './IssuesContract';
+import { triageKeys } from './triageKeys';
 
 /**
  * A virtualized, grouped, keyboard-driven list of issues.
@@ -31,7 +32,9 @@ import { Issues, type IssueRow, type IssuesSummary } from './IssuesContract';
  * exactly.
  *
  * The keys are Linear's: j and k (or the arrows) move, Shift extends,
- * x selects, Enter opens, Escape clears, Mod+A selects everything.
+ * x selects, Enter opens, Escape clears, Mod+A selects everything; and
+ * s, a, p, l and i triage the selection, or the issue under the cursor
+ * when nothing is selected (`triageKeys`).
  */
 
 export const ROW = 40;
@@ -251,6 +254,25 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
 
   const key = (keys: string, label: string, run: () => void) => shortcut({ registry, keys, label, scoped: false, group: 'List', run });
 
+  const triage = triageKeys(ctx, {
+    group: 'List',
+    labelsKey: 'l',
+    target: () => {
+      const count = issues.view.selectedCount.value;
+      const anchor = rowNodes.get(cursor.value) ?? null;
+      if (count > 0) return { name: count === 1 ? '1 issue' : `${count.toLocaleString('en-US')} issues`, anchor };
+      const id = issues.view.window.value[String(cursor.value)];
+      const row = id === undefined ? undefined : issues.view.rows.value[id];
+      if (row === undefined) return null;
+      return {
+        ids: [row.id],
+        name: row.key,
+        now: { stateId: row.stateId, priority: row.priority, assigneeId: row.assigneeId, labels: row.labels },
+        anchor
+      };
+    }
+  });
+
   let listNode: UiNode | null = null;
   const list = LazyColumn(
     {
@@ -322,7 +344,8 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
         key('Escape', 'Clear the selection', () => issues.send.clearSelection()),
         key('Mod+A', 'Select every issue', () => {
           if (total() > 0) issues.send.select({ ranges: [[0, total() - 1]], mode: 'replace' });
-        })
+        }),
+        ...triage.modifiers
       ]}>
       <Toolbar
         group={query.pipe(map(q => q.group))}
@@ -347,6 +370,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
       )}
       {list}
       <BulkBar list={() => listNode} />
+      {triage.picker}
     </column>
   );
 }

@@ -160,6 +160,116 @@ describe('the issue list from the keyboard', () => {
   });
 });
 
+describe('triage from the list', () => {
+  async function type(text: string): Promise<void> {
+    h.ui.fireEvent.type(text);
+    await settle();
+  }
+  /** The issue at a list position. */
+  const at = (index: number) => h.store.get(h.service.idsIn([[index, index]])[0]!)!;
+  /** The picker's options, not the list's rows, which are options too. */
+  const choices = () => {
+    const picker = h.ui.getByRole('dialog');
+    return h.ui.getAllByRole('option').filter(node => {
+      for (let up = node.parent; up !== null; up = up.parent) if (up === picker) return true;
+      return false;
+    });
+  };
+  const ticked = () => choices().filter(node => h.ui.getSemantics(node).states?.includes('selected'));
+
+  it('sets the status of the issue under the cursor from a picker beside it', async () => {
+    await mount();
+    await press('j');
+    const issue = at(1);
+    await press('s');
+    const picker = h.ui.getByRole('dialog', { name: `Set the status of ${issue.key}` });
+    expect(picker).toBeTruthy();
+    // What it is now is ticked, and the highlight starts there.
+    const field = h.ui.getByRole('combobox', { name: 'Status' });
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(field);
+    const [current] = ticked();
+    expect(h.ui.getSemantics(current!).label).toBe(h.store.workspace.states.find(state => state.id === issue.stateId)!.name);
+    expect(h.ui.getSemantics(field).activeDescendant).toBe(current!.id);
+    const target = h.store.workspace.states.find(state => state.id !== issue.stateId && state.name !== 'Backlog')!;
+    await type(target.name.slice(0, 3).toLowerCase());
+    await press('Enter');
+    expect(h.store.get(issue.id)!.stateId).toBe(target.id);
+    expect(h.store.undoLabel).toBe(`Moved ${issue.key} to ${target.name}`);
+    // Closed, and the caret is back on the list.
+    expect(h.ui.queryByRole('dialog')).toBeNull();
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(h.ui.getByRole('listbox', { name: 'Issues' }));
+  });
+
+  it('changes every selected issue in one undo step, and names how many', async () => {
+    await mount();
+    await press('x');
+    await press('J', { shift: true });
+    await press('J', { shift: true });
+    const ids = h.service.selectedIds();
+    const before = ids.map(id => h.store.get(id)!.priority);
+    await press('p');
+    expect(h.ui.getByRole('dialog', { name: 'Set the priority of 3 issues' })).toBeTruthy();
+    // Several issues have no one value to tick.
+    expect(ticked()).toHaveLength(0);
+    // A digit finds its priority.
+    await type('4');
+    await press('Enter');
+    expect(ids.every(id => h.store.get(id)!.priority === 4)).toBe(true);
+    // The list sorts by priority, so the top three were Urgent, not Low.
+    expect(h.store.undoLabel).toBe('Set 3 issues to Low priority');
+    h.store.undo();
+    expect(ids.map(id => h.store.get(id)!.priority)).toEqual(before);
+  });
+
+  it('assigns from a picker searched by handle, and to me with i', async () => {
+    await mount();
+    const issue = at(0);
+    const grace = h.store.workspace.users.find(user => user.name === 'Grace Kim')!;
+    await press('a');
+    await type(grace.handle);
+    await press('Enter');
+    expect(h.store.get(issue.id)!.assigneeId).toBe(grace.id);
+    await press('i');
+    expect(h.store.get(issue.id)!.assigneeId).toBe('u0');
+    expect(h.store.undoLabel).toBe(`Assigned ${issue.key} to ${h.store.workspace.users.find(user => user.id === 'u0')!.name}`);
+  });
+
+  it('adds a label with l, and takes it off again', async () => {
+    await mount();
+    const issue = at(0);
+    const label = h.store.workspace.labels.find(entry => !issue.labelIds.includes(entry.id))!;
+    await press('l');
+    await type(label.name);
+    await press('Enter');
+    expect(h.store.get(issue.id)!.labelIds).toContain(label.id);
+    await press('l');
+    await type(label.name);
+    expect(ticked().map(node => h.ui.getSemantics(node).label)).toContain(label.name);
+    await press('Enter');
+    expect(h.store.get(issue.id)!.labelIds).not.toContain(label.id);
+    expect(h.store.undoLabel).toBe(`Removed ${label.name} from ${issue.key}`);
+  });
+
+  it('changes nothing on Escape, and keeps the selection', async () => {
+    await mount();
+    await press('x');
+    await press('s');
+    await type('done');
+    await press('Escape');
+    expect(h.ui.queryByRole('dialog')).toBeNull();
+    expect(h.store.canUndo).toBe(false);
+    // Escape was the picker's: the list's Escape would have cleared the selection.
+    expect(h.service.selectedIds()).toHaveLength(1);
+  });
+
+  it('lists the triage keys wherever shortcuts are listed', async () => {
+    await mount();
+    const { registry } = h.ui.runtime.services.get(ShortcutsService);
+    const live = registry.active(h.ui.runtime.input.focus.focusedNode).map(binding => `${binding.display} ${binding.label}`);
+    expect(live).toEqual(expect.arrayContaining(['S Set status', 'A Assign', 'P Set priority', 'L Add or remove a label', 'I Assign to me']));
+  });
+});
+
 describe('display positions', () => {
   const summary: IssuesSummary = {
     total: 5,
