@@ -63,6 +63,18 @@ export interface MarkdownEditorProps {
   /** Shows the stored markdown beside the editor, as it changes. */
   showSource?: boolean;
   label?: string;
+  /**
+   * Grows with its content rather than filling its container and
+   * scrolling inside it: a description on a page that scrolls, a comment
+   * box.
+   */
+  fit?: boolean;
+  /** Shown in the empty document. */
+  placeholder?: string;
+  /** Mod+Enter, from anywhere in the editor: sending a comment. */
+  onSubmit?: () => void;
+  /** Focus left the editor, having been in it: the moment to save. */
+  onBlur?: () => void;
 }
 
 interface FocusRequest {
@@ -160,6 +172,8 @@ interface BlockHandlers {
   slashPick(value: string): void;
   /** Switches between the formatted document and its markdown. */
   toggleSource(): void;
+  /** Mod+Enter. */
+  submit(): void;
 }
 
 /** The slash menu, while it is open: which block, what's typed after the slash, which item is lit. */
@@ -176,6 +190,8 @@ interface Context {
   readonly requests: FocusRequests;
   readonly handlers: BlockHandlers;
   readonly fields: Fields;
+  /** What an empty paragraph says: the editor's placeholder while the document is empty. */
+  readonly placeholder: Observable<string>;
 }
 
 export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: ComponentContext) {
@@ -581,8 +597,35 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     },
     undo: () => restore(history.undo()),
     redo: () => restore(history.redo()),
-    moved: () => history.breakRun()
+    moved: () => history.breakRun(),
+    submit: () => inputs.onSubmit.value?.()
   };
+
+  // Leaving the editor, which may be a block or the source view, is
+  // focus moving to a node outside its root.
+  let root: UiNode | null = null;
+  let inside = false;
+  ctx.effect(focusService.focused, node => {
+    let within = false;
+    for (let current = node; current !== null && root !== null; current = current.parent) {
+      if (current === root) {
+        within = true;
+        break;
+      }
+    }
+    if (inside && !within) {
+      inputs.onBlur.value?.();
+    }
+    inside = within;
+  });
+  const placeholder = blocks.pipe(
+    map(list =>
+      list.length === 1 && list[0]!.type === 'paragraph' && list[0]!.text === '' && inputs.placeholder.value !== undefined
+        ? inputs.placeholder.value
+        : 'Type / for blocks, or markdown'
+    ),
+    distinctUntilChanged()
+  );
 
   if (inputs.onChange.value !== undefined) {
     // Every change, written as markdown. Serializing reuses each untouched
@@ -700,9 +743,23 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     }
   );
 
-  const context: Context = { cellFor, numberOf, requests, handlers, fields };
+  const context: Context = { cellFor, numberOf, requests, handlers, fields, placeholder };
+  const fit = inputs.fit.value === true;
 
-  const editor = (
+  const content = (
+    <column gap={6} padding={fit ? 12 : 20} width={percent(100)} editingGroup={group}>
+      {chunkKeys.pipe(
+        map(keys =>
+          keys.map(start => <ChunkView key={start} members={chunks.pipe(map(cut => cut.get(start) ?? []))} context={context} />)
+        )
+      )}
+    </column>
+  );
+  const editor = fit ? (
+    <column width={percent(100)} borderRadius={10} borderWidth={1} borderColor="border" role="region" label={inputs.label.value ?? 'Document'}>
+      {content}
+    </column>
+  ) : (
     <scrollview
       flexGrow={1}
       flexBasis={0}
@@ -713,20 +770,15 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       borderColor="border"
       role="region"
       label={inputs.label.value ?? 'Document'}>
-      <column gap={6} padding={20} width={percent(100)} editingGroup={group}>
-        {chunkKeys.pipe(
-          map(keys =>
-            keys.map(start => (
-              <ChunkView key={start} members={chunks.pipe(map(cut => cut.get(start) ?? []))} context={context} />
-            ))
-          )
-        )}
-      </column>
+      {content}
     </scrollview>
   );
 
+  const sourceBox = fit
+    ? { width: percent(100), borderRadius: 10, borderWidth: 1, borderColor: 'border', padding: 12 }
+    : { flexGrow: 1, flexBasis: 0, minHeight: 0, width: percent(100), borderRadius: 10, borderWidth: 1, borderColor: 'border', padding: 20 };
   const source = (
-    <scrollview flexGrow={1} flexBasis={0} minHeight={0} width={percent(100)} borderRadius={10} borderWidth={1} borderColor="border" padding={20}>
+    <scrollview {...sourceBox}>
       <editabletext
         width={percent(100)}
         multiline={true}
@@ -738,8 +790,12 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         label="Markdown"
         onInput={event => inputs.onChange.value?.(event.value)}
         onKeyDown={event => {
-          if ((event.modifiers.meta || event.modifiers.ctrl) && event.modifiers.shift && event.key.toLowerCase() === 'm') {
+          const command = event.modifiers.meta || event.modifiers.ctrl;
+          if (command && event.modifiers.shift && event.key.toLowerCase() === 'm') {
             handlers.toggleSource();
+            event.preventDefault();
+          } else if (command && event.key === 'Enter') {
+            handlers.submit();
             event.preventDefault();
           }
         }}
@@ -750,7 +806,12 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
 
   // The same document, formatted or as markdown, with a switch between.
   const body = (
-    <column flexGrow={1} flexBasis={0} height={percent(100)} gap={8}>
+    <column
+      ref={node => (root = node)}
+      flexGrow={1}
+      flexBasis={0}
+      {...(fit ? {} : { height: percent(100) })}
+      gap={fit ? 4 : 8}>
       <row width={percent(100)} x="end">
         <Button
           size="small"
@@ -766,7 +827,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
 
   if (inputs.showSource.value !== true) {
     return (
-      <row width={percent(100)} height={percent(100)}>
+      <row width={percent(100)} {...(fit ? {} : { height: percent(100) })}>
         {body}
       </row>
     );
@@ -892,6 +953,9 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     if (command && shift && event.key.toLowerCase() === 'm') {
       handlers.toggleSource();
       event.preventDefault();
+    } else if (command && event.key === 'Enter') {
+      handlers.submit();
+      event.preventDefault();
     } else if (!command && handlers.slashKey(id, event.key)) {
       event.preventDefault();
     } else if (formatting !== null) {
@@ -953,7 +1017,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       fontWeight={type === 'heading' ? 700 : 400}
       fontFamily={type === 'code' || raw ? MONO : undefined}
       color={current.pipe(map(b => (raw || (b.type === 'task' && b.checked === true) ? 'textMuted' : 'text')))}
-      placeholder={type === 'paragraph' ? 'Type / for blocks, or markdown' : ''}
+      placeholder={type === 'paragraph' ? inputs.context.value.placeholder : ''}
       label={label(current.value)}
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}
@@ -1005,13 +1069,16 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     case 'code':
     case 'raw':
       return (
-        <box width={percent(100)} padding={12} borderRadius={8} backgroundColor="surface">
+        <box width={percent(100)} x="stretch" padding={12} borderRadius={8} backgroundColor="surface">
           {field}
         </box>
       );
     default:
+      // Stretched, so the field is the line's whole width: a press past
+      // the end of a short line lands in it and puts the caret at its end,
+      // as it does in any document.
       return (
-        <box width={percent(100)} paddingTop={type === 'heading' ? 8 : 0}>
+        <box width={percent(100)} x="stretch" paddingTop={type === 'heading' ? 8 : 0}>
           {field}
         </box>
       );

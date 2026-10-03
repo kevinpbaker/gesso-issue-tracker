@@ -58,6 +58,12 @@ export interface Issue {
   readonly priority: Priority;
   readonly assigneeId: string | null;
   readonly labelIds: readonly string[];
+  /** Points, or null for no estimate. */
+  readonly estimate: number | null;
+  /** A calendar date, `YYYY-MM-DD`, or null. A string, so no time zone puts it a day out. */
+  readonly dueDate: string | null;
+  /** The issue this is a sub-issue of, by id. One level: a sub-issue has no sub-issues of its own. */
+  readonly parentId: string | null;
   /**
    * Manual order within a workflow state, smallest first. A move writes
    * one rank between its new neighbours rather than renumbering the
@@ -77,6 +83,17 @@ export interface Comment {
   readonly createdAt: number;
 }
 
+/**
+ * A link between two issues. `blocks` and `duplicates` read from
+ * `fromId` to `toId` ("WEB-1 blocks WEB-2"); `related` reads both ways.
+ */
+export interface IssueRelation {
+  readonly id: string;
+  readonly fromId: string;
+  readonly toId: string;
+  readonly kind: 'related' | 'blocks' | 'duplicates';
+}
+
 /** One field that changed, for the activity feed. */
 export interface FieldChange {
   readonly field: keyof Issue;
@@ -89,8 +106,10 @@ export interface ActivityEvent {
   readonly issueId: string;
   readonly actorId: string;
   readonly at: number;
-  readonly kind: 'created' | 'updated' | 'commented';
+  readonly kind: 'created' | 'updated' | 'commented' | 'related' | 'unrelated';
   readonly changes: readonly FieldChange[];
+  /** For `related` and `unrelated`, the link. */
+  readonly relation?: IssueRelation;
 }
 
 export interface Workspace {
@@ -101,4 +120,5 @@ export interface Workspace {
   readonly labels: readonly Label[];
   readonly issues: readonly Issue[];
   readonly comments: readonly Comment[];
+  readonly relations: readonly IssueRelation[];
 }

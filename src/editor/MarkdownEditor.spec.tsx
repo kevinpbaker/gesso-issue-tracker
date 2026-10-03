@@ -481,6 +481,49 @@ describe('input from an IME', () => {
   });
 });
 
+describe('on a page', () => {
+  function Host(inputs: Inputs<{ events: string[] }>, _ctx: ComponentContext) {
+    const events = inputs.events.value;
+    return (
+      <column width={percent(100)} gap={10}>
+        <MarkdownEditor
+          value=""
+          fit
+          label="Comment"
+          placeholder="Leave a comment"
+          onSubmit={() => events.push('submit')}
+          onBlur={() => events.push('blur')}
+        />
+        <editabletext label="Elsewhere" value="" width={200} />
+      </column>
+    );
+  }
+
+  it('grows with its content, says its placeholder, submits on Mod+Enter and hears focus leave', async () => {
+    const events: string[] = [];
+    ui = renderTest(createComponent(Host, { events }), { width: 600, height: 600 });
+    await ui.settle();
+    const block = ui.getAllByRole('textbox', { name: 'Paragraph' })[0]!;
+    expect(block.properties.get('placeholder')).toBe('Leave a comment');
+    const region = ui.getByRole('region', { name: 'Comment' });
+    // Each block is the line's whole width, so a press past a short line's end lands in it.
+    expect(ui.getLayout(block).width).toBeGreaterThan(ui.getLayout(region).width - 40);
+    const empty = ui.getLayout(region).height;
+    expect(empty).toBeLessThan(100);
+    await caretIn('Paragraph', 0, 0);
+    await type('one');
+    await press('Enter');
+    await type('two');
+    expect(ui.getLayout(region).height).toBeGreaterThan(empty);
+    expect(ui.getAllByRole('textbox', { name: 'Paragraph' })[1]!.properties.get('placeholder')).toBe('Type / for blocks, or markdown');
+    await press('Enter', { meta: true });
+    expect(events).toEqual(['submit']);
+    ui.fireEvent.focus(ui.getByLabel('Elsewhere'));
+    await ui.settle();
+    expect(events).toEqual(['submit', 'blur']);
+  });
+});
+
 describe('the exit criterion', () => {
   /**
    * Phase 5's exit criterion, as one person at the keyboard: a long bug

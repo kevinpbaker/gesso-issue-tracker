@@ -113,4 +113,90 @@ describe('the issue store', () => {
     expect(store.exportOverlay().issues).toEqual([]);
     expect(store.canUndo).toBe(false);
   });
+
+  it('links two issues, both ways, as one undoable step with news on both', () => {
+    const store = make();
+    const link = { id: 'rx', fromId: 'i1', toId: 'i2', kind: 'blocks' as const };
+    store.relate(link);
+    expect(store.relationsOf('i1')).toContainEqual(link);
+    expect(store.relationsOf('i2')).toContainEqual(link);
+    expect(store.activityOf('i1').at(-1)).toMatchObject({ kind: 'related', relation: link });
+    expect(store.activityOf('i2').at(-1)).toMatchObject({ kind: 'related', relation: link });
+    // The same link again, or a related link either way round, is nothing.
+    expect(store.relate({ ...link, id: 'ry' })).toBeNull();
+    store.relate({ id: 'rz', fromId: 'i1', toId: 'i2', kind: 'related' });
+    expect(store.relate({ id: 'rw', fromId: 'i2', toId: 'i1', kind: 'related' })).toBeNull();
+    store.undo();
+    store.undo();
+    expect(store.relationsOf('i1')).not.toContainEqual(link);
+    store.redo();
+    expect(store.relationsOf('i1')).toContainEqual(link);
+    store.unrelate('rx', 'i2');
+    expect(store.relationsOf('i1')).not.toContainEqual(link);
+    expect(store.activityOf('i2').at(-1)!.kind).toBe('unrelated');
+  });
+
+  it('keeps each parent’s sub-issues as issues move between parents', () => {
+    const store = make();
+    store.update(['i5', 'i6'], { parentId: 'i1' }, 'Make sub-issues');
+    expect(store.childrenOf('i1').map(issue => issue.id)).toEqual(expect.arrayContaining(['i5', 'i6']));
+    store.update(['i6'], { parentId: 'i2' }, 'Move');
+    expect(store.childrenOf('i1').map(issue => issue.id)).not.toContain('i6');
+    expect(store.childrenOf('i2').map(issue => issue.id)).toContain('i6');
+    store.undo();
+    expect(store.childrenOf('i2').map(issue => issue.id)).not.toContain('i6');
+    expect(store.childrenOf('i1').map(issue => issue.id)).toContain('i6');
+  });
+
+  it('saves links made and taken away, and sub-issues, through its overlay', () => {
+    const store = make();
+    const seeded = store.workspace.relations[0]!;
+    const end = seeded.fromId;
+    store.unrelate(seeded.id, end);
+    store.relate({ id: 'rx', fromId: 'i1', toId: 'i2', kind: 'duplicates' });
+    store.update(['i7'], { parentId: 'i3', estimate: 5, dueDate: '2026-11-02' }, 'Plan');
+    const overlay = JSON.parse(JSON.stringify(store.exportOverlay()));
+
+    const fresh = make();
+    fresh.importOverlay(overlay);
+    expect(fresh.relationsOf(end).map(entry => entry.id)).not.toContain(seeded.id);
+    expect(fresh.relationsOf('i2').map(entry => entry.id)).toContain('rx');
+    expect(fresh.childrenOf('i3').map(issue => issue.id)).toContain('i7');
+    expect(fresh.get('i7')).toMatchObject({ estimate: 5, dueDate: '2026-11-02' });
+  });
+
+  it('reads an overlay saved before links and sub-issues existed', () => {
+    const store = make();
+    store.update(['i3'], { title: 'Old' }, 'Rename');
+    const overlay = JSON.parse(JSON.stringify(store.exportOverlay()));
+    delete overlay.relations;
+    delete overlay.unrelated;
+    for (const issue of overlay.issues) {
+      delete issue.estimate;
+      delete issue.dueDate;
+      delete issue.parentId;
+    }
+    const fresh = make();
+    expect(fresh.importOverlay(overlay)).toBe(true);
+    expect(fresh.get('i3')).toMatchObject({ title: 'Old', estimate: null, dueDate: null, parentId: null });
+  });
+
+  it('keeps a run of description edits as one line in the feed', () => {
+    let now = 1_000;
+    const store = new IssueStore(seedWorkspace({ issues: 10 }), 1, () => now);
+    const original = store.get('i0')!.description;
+    store.update(['i0'], { description: 'one' }, 'Edit');
+    now += 60_000;
+    store.update(['i0'], { description: 'two' }, 'Edit');
+    expect(store.activityOf('i0')).toHaveLength(1);
+    expect(store.activityOf('i0')[0]!.changes[0]).toMatchObject({ from: original, to: 'two' });
+    expect(store.exportOverlay().activity).toHaveLength(1);
+    // Each save is still its own undo step.
+    store.undo();
+    expect(store.get('i0')!.description).toBe('one');
+    // Much later, it's a new edit.
+    now += 3_600_000;
+    store.update(['i0'], { description: 'three' }, 'Edit');
+    expect(store.activityOf('i0')).toHaveLength(2);
+  });
 });

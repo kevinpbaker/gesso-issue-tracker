@@ -19,7 +19,7 @@ Gesso feels at least as good as a DOM one, the "only good for exotic
 demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
-**Status:** Phases 0 to 5 are done. Phase 6 is next.
+**Status:** Phases 0 to 6 are done. Phase 7 is next.
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -62,6 +62,23 @@ out precisely where and why.
   spec: a bug report with headings, a nested list, a checklist, code, a
   link, two mentions and IME input, typed from the keyboard, saves to
   clean markdown, reloads identically and survives view source.
+- **Phase 6:** the issue page (`src/detail/IssueScreen.tsx`) edits
+  everything in place. The title saves on Enter or when focus leaves.
+  The description is the Phase 5 editor, growing with its content and
+  saving a moment after typing stops and when focus leaves; a run of
+  saves is one line in the feed. The sidebar sets status, priority,
+  assignee, labels, project, estimate, due date and parent, each a
+  control that saves as it changes: Select, Combobox (one value or
+  several, or searching the app worker's 50,000 issues), and DatePicker,
+  the last two new in Gesso for this. Sub-issues (one level) and links
+  (related, blocks and blocked by, duplicates) are added by searching
+  and taken off with a button. Comments are written in the same editor
+  and sent with Mod+Enter. Estimates, due dates, sub-issues and links
+  are in the model, seeded from a stream of their own so every existing
+  seeded issue is unchanged, and overlays saved before them still load.
+  The exit criterion is a spec that sets every property, adds a
+  sub-issue and a link, writes the description and a comment, all from
+  the keyboard, and reloads it unchanged.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -69,7 +86,7 @@ out precisely where and why.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,469 tests in 20 files.
+`pnpm test` runs 1,481 tests in 21 files.
 
 ---
 

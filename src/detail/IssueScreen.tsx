@@ -1,21 +1,27 @@
-import { combineLatest } from 'rxjs';
+import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { percent } from 'gesso-core';
-import { Button, TextArea } from 'gesso-components';
-import { internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { percent, type UiChild } from 'gesso-core';
+import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
+import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { routeParam } from '../app/params';
+import { WorkspaceMeta } from '../app/WorkspaceContract';
+import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
-import { PRIORITY_NAMES, type Priority } from '../model/types';
-import { IssueDetailChannel, type IssueDetail } from './IssueDetailContract';
+import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
+import { IssueDetailChannel, type IssueDetail, type IssueRef, type LinkKind } from './IssueDetailContract';
 
 /**
- * `/issue/:key`: one issue, read-only but for comments.
+ * `/issue/:key`: one issue, every part of it editable in place.
  *
- * Phase 6 makes every field editable and puts the Phase 5 editor in
- * the description. Phase 2 needs the route to land on something real,
- * and the comment box proves a write round trip from this screen.
+ * The title is a field that saves on Enter or when focus leaves it, and
+ * Escape puts it back. The description is the Phase 5 editor, saving a
+ * moment after typing stops and again when focus leaves it. The sidebar
+ * holds the properties, each a control that saves as it's changed.
+ * Below the description: sub-issues, links to other issues, the
+ * activity feed with its comments, and a comment box that is the same
+ * editor again.
  *
  * The detail channel holds whichever issue was asked for last, so the
  * screen filters it to its own question: an answer for a different key
@@ -51,70 +57,472 @@ export function IssueScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
   );
 }
 
+/** How long typing has to stop before the description saves. */
+const SAVE_AFTER_MS = 800;
+
 function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContext) {
   const channel = ctx.channel(IssueDetailChannel);
+  const router = ctx.inject(RouterService);
   const detail = inputs.detail;
-  const draft = internalState('');
   const issue = detail.pipe(map(d => d.issue!));
+  const update = (patch: Partial<Issue>, label: string): void => channel.send.update({ patch, label });
+  const open = (key: string): void => router.navigate(`/issue/${key}`);
 
-  const send = (): void => {
-    if (draft.value.trim() !== '') {
-      channel.send.comment(draft.value);
-      draft.value = '';
+  // The description saves a moment after typing stops, and when focus
+  // leaves the editor; whatever is pending goes then, once.
+  let pending: string | null = null;
+  /** The description as this page last had it: what it mounted with, or what was typed since. */
+  let mine: string | null = null;
+  // The editor reads its value once, so a description that changes from
+  // somewhere else (the saved copy arriving after a reload, an undo,
+  // another tab) mounts a new one. Its own saves coming back don't.
+  const outside = issue.pipe(
+    map(i => i.description),
+    distinctUntilChanged(),
+    filter(text => text !== mine),
+    map(text => {
+      flush();
+      mine = text;
+      return text;
+    })
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = (): void => {
+    clearTimeout(timer);
+    if (pending !== null) {
+      update({ description: pending }, 'Edited the description');
+      pending = null;
     }
   };
+  ctx.onUnmount(flush);
 
-  const property = (name: string, value: ReturnType<typeof detail.pipe<string>>) => (
-    <column gap={2}>
+  return (
+    <row gap={32} padding={32} y="start" width={percent(100)}>
+      <column flexGrow={1} flexShrink={1} minWidth={0} gap={20} maxWidth={780} role="region" label={issue.pipe(map(i => `${i.key} ${i.title}`))}>
+        <Breadcrumbs detail={detail} open={open} />
+        <TitleField issue={issue} onSave={title => update({ title }, 'Renamed')} />
+        {outside.pipe(
+          map((text, round) => (
+            <MarkdownEditor
+              key={String(round)}
+              value={text}
+              fit
+              label="Description"
+              placeholder="Add a description…"
+              onChange={markdown => {
+                if (markdown === mine) return;
+                mine = markdown;
+                pending = markdown;
+                clearTimeout(timer);
+                timer = setTimeout(flush, SAVE_AFTER_MS);
+              }}
+              onBlur={flush}
+            />
+          ))
+        )}
+        <SubIssues detail={detail} open={open} />
+        <Links detail={detail} open={open} />
+        <box height={1} backgroundColor="border" />
+        <Activity detail={detail} />
+        <CommentBox />
+      </column>
+      <Properties detail={detail} update={update} />
+    </row>
+  );
+}
+
+function Breadcrumbs(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void }>, _ctx: ComponentContext) {
+  const detail = inputs.detail;
+  return (
+    <row gap={6} y="center">
+      <text text={detail.pipe(map(d => d.teamName))} fontSize={12} color="textMuted" />
+      <text text="›" fontSize={12} color="textMuted" />
+      {detail.pipe(
+        map(d => d.parent),
+        distinctUntilChanged((a, b) => a?.key === b?.key),
+        map(parent =>
+          parent === null
+            ? []
+            : [
+                <Link key={parent.key} label={`${parent.key} ${parent.title}`} onPress={() => inputs.open.value(parent.key)}>
+                  <text text={parent.key} fontSize={12} color="primary" />
+                </Link>,
+                <text key="sep" text="›" fontSize={12} color="textMuted" />
+              ]
+        )
+      )}
+      <text text={detail.pipe(map(d => d.issue!.key))} fontSize={12} color="textMuted" />
+    </row>
+  );
+}
+
+/**
+ * The title, edited where it's read. Enter saves (it's one line, even
+ * when it wraps), Escape puts it back, and leaving the field saves.
+ */
+function TitleField(inputs: Inputs<{ issue: Issue; onSave: (title: string) => void }>, ctx: ComponentContext) {
+  const focus = ctx.inject(FocusService);
+  const draft = internalState(inputs.issue.value.title);
+  let editing = false;
+  // The saved title shows whenever nobody is typing in it.
+  ctx.effect(inputs.issue.pipe(map(i => i.title), distinctUntilChanged()), title => {
+    if (!editing) draft.value = title;
+  });
+  const save = (): void => {
+    const title = draft.value.replace(/\s+/g, ' ').trim();
+    if (title === '') {
+      draft.value = inputs.issue.value.title;
+    } else if (title !== inputs.issue.value.title) {
+      inputs.onSave.value(title);
+    }
+  };
+  return (
+    <editabletext
+      value={draft}
+      multiline={true}
+      textWrap="word"
+      fontSize={24}
+      fontWeight={700}
+      color="text"
+      label="Title"
+      padding={4}
+      borderRadius={6}
+      onFocus={() => (editing = true)}
+      onBlur={() => {
+        editing = false;
+        save();
+      }}
+      onInput={event => (draft.value = event.value)}
+      onKeyDown={event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          save();
+          focus.blur();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          draft.value = inputs.issue.value.title;
+          focus.blur();
+        }
+      }}
+    />
+  );
+}
+
+/** A row that opens another issue: its state, its key and its title. */
+function IssueRow(inputs: Inputs<{ issue: IssueRef; prefix?: string; open: (key: string) => void; onRemove: () => void; removeLabel: string }>, _ctx: ComponentContext) {
+  const ref = inputs.issue.value;
+  return (
+    <row gap={10} y="center" paddingTop={6} paddingBottom={6} paddingLeft={8} paddingRight={4} borderRadius={6} backgroundColor="surface">
+      {inputs.prefix.value === undefined ? [] : <text text={inputs.prefix.value} fontSize={12} color="textMuted" width={96} />}
+      <box width={8} height={8} borderRadius={4} backgroundColor={ref.closed ? 'primary' : 'textMuted'} label={ref.stateName} />
+      <Link label={`${ref.key} ${ref.title}`} onPress={() => inputs.open.value(ref.key)}>
+        <text text={ref.key} fontSize={12} color="textMuted" />
+      </Link>
+      <text text={ref.title} fontSize={13} color={ref.closed ? 'textMuted' : 'text'} flexGrow={1} flexShrink={1} textWrap="none" />
+      <Button size="small" variant="plain" label={inputs.removeLabel.value} onClick={() => inputs.onRemove.value()}>
+        <text text="×" fontSize={14} color="textMuted" />
+      </Button>
+    </row>
+  );
+}
+
+/** The search for another issue, as combobox options: the key and title, both searchable. */
+function useIssueSearch(ctx: ComponentContext): { options: Observable<readonly ComboboxOption[]>; find: (query: string) => void } {
+  const channel = ctx.channel(IssueDetailChannel);
+  return {
+    options: channel.view.found.pipe(map(found => found.map(ref => ({ value: ref.key, label: `${ref.key} ${ref.title}`, detail: ref.stateName })))),
+    find: query => channel.send.find(query)
+  };
+}
+
+function SubIssues(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void }>, ctx: ComponentContext) {
+  const channel = ctx.channel(IssueDetailChannel);
+  const search = useIssueSearch(ctx);
+  // Re-made after each pick, so the field comes back empty.
+  const round = internalState(0);
+  const children = inputs.detail.pipe(map(d => d.children));
+  // A sub-issue has no sub-issues of its own: one level, as the store keeps it.
+  const canHave = inputs.detail.pipe(map(d => d.parent === null));
+  return (
+    <column gap={8} label="Sub-issues" role="region">
+      <row gap={8} y="center">
+        <text text="Sub-issues" fontSize={14} fontWeight={600} color="text" />
+        <text
+          text={children.pipe(map(list => (list.length === 0 ? '' : `${list.filter(c => c.closed).length} of ${list.length} done`)))}
+          fontSize={12}
+          color="textMuted"
+        />
+      </row>
+      <column gap={4}>
+        {children.pipe(
+          map(list =>
+            list.map(child => (
+              <IssueRow
+                key={child.key}
+                issue={child}
+                open={inputs.open.value}
+                removeLabel={`Remove ${child.key} from sub-issues`}
+                onRemove={() => channel.send.removeChild(child.key)}
+              />
+            ))
+          )
+        )}
+      </column>
+      {combineLatest([canHave, round]).pipe(
+        map(([can, n]) =>
+          can
+            ? [
+                <Combobox
+                  key={String(n)}
+                  label="Add a sub-issue"
+                  labelHidden
+                  placeholder="Add a sub-issue by key or title"
+                  filter={false}
+                  emptyText="Type a key or part of a title"
+                  options={search.options}
+                  onQueryChange={search.find}
+                  value=""
+                  onChange={key => {
+                    channel.send.addChild(key);
+                    round.value += 1;
+                  }}
+                />
+              ]
+            : [<text key="none" text="This is a sub-issue, so it can't have its own." fontSize={12} color="textMuted" />]
+        )
+      )}
+    </column>
+  );
+}
+
+const LINK_KINDS: readonly SelectOption[] = [
+  { value: 'related', label: 'Related to' },
+  { value: 'blocks', label: 'Blocks' },
+  { value: 'blocked-by', label: 'Blocked by' },
+  { value: 'duplicates', label: 'Duplicates' },
+  { value: 'duplicated-by', label: 'Duplicated by' }
+];
+
+function Links(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void }>, ctx: ComponentContext) {
+  const channel = ctx.channel(IssueDetailChannel);
+  const search = useIssueSearch(ctx);
+  const kind = internalState<string>('related');
+  const round = internalState(0);
+  const links = inputs.detail.pipe(map(d => d.links));
+  return (
+    <column gap={8} label="Links" role="region">
+      <text text="Links" fontSize={14} fontWeight={600} color="text" />
+      <column gap={4}>
+        {links.pipe(
+          map(list =>
+            list.map(link => (
+              <IssueRow
+                key={link.id}
+                issue={link.other}
+                prefix={link.phrase}
+                open={inputs.open.value}
+                removeLabel={`Remove the link: ${link.phrase.toLowerCase()} ${link.other.key}`}
+                onRemove={() => channel.send.unlink(link.id)}
+              />
+            ))
+          )
+        )}
+      </column>
+      <row gap={8} y="start">
+        <Select label="Link type" labelHidden options={LINK_KINDS} value={kind} onChange={next => (kind.value = next)} width={150} />
+        {round.pipe(
+          map(n => (
+            <Combobox
+              key={String(n)}
+              label="Link to an issue"
+              labelHidden
+              placeholder="Link to an issue by key or title"
+              filter={false}
+              emptyText="Type a key or part of a title"
+              options={search.options}
+              onQueryChange={search.find}
+              value=""
+              onChange={key => {
+                channel.send.link({ key, kind: kind.value as LinkKind });
+                round.value += 1;
+              }}
+              flexGrow={1}
+            />
+          ))
+        )}
+      </row>
+    </column>
+  );
+}
+
+function Activity(inputs: Inputs<{ detail: IssueDetail }>, _ctx: ComponentContext) {
+  return (
+    <column gap={10} x="stretch" role="region" label="Activity">
+      <text text="Activity" fontSize={14} fontWeight={600} color="text" />
+      {inputs.detail.pipe(
+        map(d =>
+          [
+            ...d.comments.map(c => ({ at: c.createdAt, id: c.id, kind: 'comment' as const, who: c.author, body: c.body })),
+            ...d.activity.map(a => ({ at: a.at, id: a.id, kind: 'event' as const, who: '', body: a.text }))
+          ]
+            .sort((a, b) => a.at - b.at)
+            .map(entry =>
+              entry.kind === 'event' ? (
+                <text key={entry.id} text={entry.body} fontSize={12} color="textMuted" />
+              ) : (
+                <column key={entry.id} gap={6} padding={12} borderRadius={8} borderWidth={1} borderColor="border">
+                  <text text={entry.who} fontSize={12} fontWeight={600} color="text" />
+                  <MarkdownView source={entry.body} />
+                </column>
+              )
+            )
+        )
+      )}
+    </column>
+  );
+}
+
+/** A comment, written in the same editor as the description. Mod+Enter sends it. */
+function CommentBox(_inputs: Inputs<{}>, ctx: ComponentContext) {
+  const channel = ctx.channel(IssueDetailChannel);
+  const draft = internalState('');
+  // A new editor after each comment: the editor reads its value once.
+  const round = internalState(0);
+  const send = (): void => {
+    if (draft.value.trim() === '') return;
+    channel.send.comment(draft.value);
+    draft.value = '';
+    round.value += 1;
+  };
+  return (
+    <column gap={8}>
+      {round.pipe(
+        map(n => (
+          <MarkdownEditor key={String(n)} value="" fit label="Comment" placeholder="Leave a comment…" onChange={markdown => (draft.value = markdown)} onSubmit={send} />
+        ))
+      )}
+      <row x="end">
+        <Button label="Comment" description="Mod+Enter" onClick={send} disabled={draft.pipe(map(text => text.trim() === ''))}>
+          <text text="Comment" fontSize={13} color="background" />
+        </Button>
+      </row>
+    </column>
+  );
+}
+
+const PRIORITIES: readonly SelectOption[] = ([0, 1, 2, 3, 4] as Priority[]).map(p => ({ value: String(p), label: PRIORITY_NAMES[p] }));
+// '' is an option, to clear the estimate, and also a Select's empty value,
+// which it draws as its placeholder; so the placeholder says the same.
+const ESTIMATES: readonly SelectOption[] = [
+  { value: '', label: 'No estimate' },
+  ...[1, 2, 3, 5, 8].map(points => ({ value: String(points), label: `${points} point${points === 1 ? '' : 's'}` }))
+];
+
+/** The sidebar: every property, each saving as it changes. */
+function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partial<Issue>, label: string) => void }>, ctx: ComponentContext) {
+  const meta = ctx.channel(WorkspaceMeta);
+  const channel = ctx.channel(IssueDetailChannel);
+  const search = useIssueSearch(ctx);
+  const issue = inputs.detail.pipe(map(d => d.issue!));
+  const update = (patch: Partial<Issue>, label: string): void => inputs.update.value(patch, label);
+
+  const states = meta.view.states.pipe(map(list => list.map(state => ({ value: state.id, label: state.name }))));
+  const people = meta.view.users.pipe(
+    map(users => [{ value: '', label: 'Unassigned' }, ...users.map(user => ({ value: user.id, label: user.name, detail: `@${user.handle}` }))])
+  );
+  const labels = meta.view.labels.pipe(map(list => list.map(label => ({ value: label.id, label: label.name }))));
+  const projects = combineLatest([meta.view.projects, issue.pipe(map(i => i.teamId), distinctUntilChanged())]).pipe(
+    map(([list, team]) => [{ value: '', label: 'No project' }, ...list.filter(p => p.teamId === team).map(p => ({ value: p.id, label: p.name }))])
+  );
+  // The parent field lists the parent it has, so its key stays shown while a search moves on.
+  const parentOptions = combineLatest([search.options, inputs.detail.pipe(map(d => d.parent))]).pipe(
+    map(([found, parent]) =>
+      parent === null || found.some(option => option.value === parent.key) ? found : [{ value: parent.key, label: `${parent.key} ${parent.title}` }, ...found]
+    )
+  );
+
+  const row = (name: string, control: UiChild) => (
+    <column gap={4}>
       <text text={name} fontSize={11} color="textMuted" />
-      <text text={value} fontSize={13} color="text" />
+      {control}
     </column>
   );
 
   return (
-    <row gap={32} padding={32} y="start">
-      <column flexGrow={1} flexShrink={1} gap={20} maxWidth={760} role="region" label={issue.pipe(map(i => `${i.key} ${i.title}`))}>
-        <text text={issue.pipe(map(i => i.title))} fontSize={22} fontWeight={700} color="text" />
-        <MarkdownView source={issue.pipe(map(i => i.description))} />
-        <box height={1} backgroundColor="border" />
-        <text text="Activity" fontSize={14} fontWeight={600} color="text" />
-        <column gap={10} x="stretch">
-          {detail.pipe(
-            map(d =>
-              [
-                ...d.comments.map(c => ({ at: c.createdAt, id: c.id, kind: 'comment' as const, who: c.author, body: c.body })),
-                ...d.activity.map(a => ({ at: a.at, id: a.id, kind: 'event' as const, who: '', body: a.text }))
+    <column width={280} flexShrink={0} gap={14} padding={16} borderRadius={10} backgroundColor="surface" role="region" label="Properties">
+      {row('Status', <Select label="Status" labelHidden options={states} value={issue.pipe(map(i => i.stateId))} onChange={stateId => update({ stateId }, 'Changed status')} />)}
+      {row(
+        'Priority',
+        <Select label="Priority" labelHidden options={PRIORITIES} value={issue.pipe(map(i => String(i.priority)))} onChange={p => update({ priority: Number(p) as Priority }, 'Changed priority')} />
+      )}
+      {row(
+        'Assignee',
+        <Combobox
+          label="Assignee"
+          labelHidden
+          placeholder="Unassigned"
+          options={people}
+          value={issue.pipe(map(i => i.assigneeId ?? ''))}
+          onChange={id => update({ assigneeId: id === '' ? null : id }, 'Changed assignee')}
+        />
+      )}
+      {row(
+        'Labels',
+        <Combobox
+          label="Labels"
+          labelHidden
+          multiple
+          placeholder="Add a label"
+          options={labels}
+          values={issue.pipe(map(i => i.labelIds))}
+          onValuesChange={labelIds => update({ labelIds }, 'Changed labels')}
+        />
+      )}
+      {row(
+        'Project',
+        <Select label="Project" labelHidden placeholder="No project" options={projects} value={issue.pipe(map(i => i.projectId ?? ''))} onChange={id => update({ projectId: id === '' ? null : id }, 'Changed project')} />
+      )}
+      {row(
+        'Estimate',
+        <Select
+          label="Estimate"
+          labelHidden
+          placeholder="No estimate"
+          options={ESTIMATES}
+          value={issue.pipe(map(i => (i.estimate === null ? '' : String(i.estimate))))}
+          onChange={points => update({ estimate: points === '' ? null : Number(points) }, 'Changed estimate')}
+        />
+      )}
+      {row(
+        'Due date',
+        <DatePicker label="Due date" labelHidden value={issue.pipe(map(i => i.dueDate ?? ''))} onChange={day => update({ dueDate: day === '' ? null : day }, 'Changed due date')} />
+      )}
+      {row(
+        'Parent issue',
+        <Combobox
+          label="Parent issue"
+          labelHidden
+          placeholder="No parent"
+          filter={false}
+          emptyText="Type a key or part of a title"
+          options={parentOptions}
+          onQueryChange={search.find}
+          value={inputs.detail.pipe(map(d => d.parent?.key ?? ''))}
+          onChange={key => channel.send.setParent(key === '' ? null : key)}
+        />
+      )}
+      {inputs.detail.pipe(
+        map(d => d.parent),
+        map(parent =>
+          parent === null
+            ? []
+            : [
+                <Button key="unparent" size="small" variant="plain" label="Remove from parent" onClick={() => channel.send.setParent(null)}>
+                  <text text="Remove from parent" fontSize={12} color="textMuted" />
+                </Button>
               ]
-                .sort((a, b) => a.at - b.at)
-                .map(entry =>
-                  entry.kind === 'event' ? (
-                    <text key={entry.id} text={entry.body} fontSize={12} color="textMuted" />
-                  ) : (
-                    <column key={entry.id} gap={6} padding={12} borderRadius={8} borderWidth={1} borderColor="border">
-                      <text text={entry.who} fontSize={12} fontWeight={600} color="text" />
-                      <MarkdownView source={entry.body} />
-                    </column>
-                  )
-                )
-            )
-          )}
-        </column>
-        <TextArea label="Leave a comment" placeholder="Markdown works here" value={draft} onChange={next => (draft.value = next)} />
-        <row x="end">
-          <Button label="Comment" onClick={send} disabled={draft.pipe(map(text => text.trim() === ''))}>
-            <text text="Comment" fontSize={13} color="background" />
-          </Button>
-        </row>
-      </column>
-      <column width={220} flexShrink={0} gap={16} padding={16} borderRadius={10} backgroundColor="surface" label="Properties">
-        {property('Status', detail.pipe(map(d => d.stateName)))}
-        {property('Priority', issue.pipe(map(i => PRIORITY_NAMES[i.priority as Priority])))}
-        {property('Assignee', detail.pipe(map(d => d.assigneeName || 'Unassigned')))}
-        {property('Labels', detail.pipe(map(d => d.labels.join(', ') || 'None')))}
-        {property('Project', detail.pipe(map(d => d.projectName || 'None')))}
-        {property('Team', detail.pipe(map(d => d.teamName)))}
-        {property('Key', issue.pipe(map(i => i.key)))}
-      </column>
-    </row>
+        )
+      )}
+    </column>
   );
 }

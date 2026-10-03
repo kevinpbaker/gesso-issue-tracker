@@ -23,6 +23,7 @@ import { boardSource } from './board/boardSource';
 import { createBoardStore } from './board/BoardStore';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
 import { IssueDetailService } from './detail/IssueDetailService';
+import { detailSource } from './detail/detailSource';
 import { IssueQueryService } from './issues/IssueQueryService';
 import { Issues } from './issues/IssuesContract';
 import { issuesSource } from './issues/issuesSource';
@@ -61,17 +62,7 @@ serveChannels([
   },
   { token: Board, source: boardSource(createBoardStore(store)) },
   { token: Issues, source: issuesSource(new IssueQueryService(store), store, reset) },
-  {
-    token: IssueDetailChannel,
-    source: {
-      view: { detail: detail.detail },
-      commands: {
-        open: key => detail.open(key),
-        update: ({ patch, label }) => detail.update(patch, label),
-        comment: body => detail.comment(body)
-      }
-    }
-  }
+  { token: IssueDetailChannel, source: detailSource(detail) }
 ]);
 
 void preferences.restore();

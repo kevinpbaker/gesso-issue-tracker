@@ -4,11 +4,11 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `53b4c46`. Not yet pushed or released. Every
+per fix, `2c572e3` through `7e76ada`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The last four (16 to 19) were checked with their packages'
+build. The ones since (16 to 24) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now.
 
@@ -312,6 +312,56 @@ put it on the clipboard as `text/html` beside the text (`53b4c46`). What
 a group makes of a selection is now cached until the selection or the
 text under it changes. Checked in Chrome: a copy across a heading and a
 paragraph carries both the markdown and `<h2>…</h2><p>…<strong>…`.
+
+### 20. A highlight couldn't be announced without moving focus
+
+**What:** a combobox keeps the caret in its field while the arrows walk
+its list, so a screen reader has to be told which option is lit
+without focus going there. Gesso had no `aria-activedescendant`.
+
+**Fix:** an `activeDescendant` prop names that node; the mirror writes
+`aria-activedescendant` on the element, and on the editing proxy (with
+`aria-expanded`) while a field holds focus (`5a27b40`).
+
+### 21. A component couldn't scroll a row into view without focusing it
+
+**What:** keyboard focus scrolls its node into view, but a highlight
+moving through a list doesn't move focus, so a long list didn't follow
+it.
+
+**Fix:** `ScrollService.scrollIntoView(node)` (`68b01e0`).
+
+### 22. There was no combobox
+
+**What:** the sidebar's assignee and labels need a list a person
+searches by typing, one value or several. Gesso had `Select`, which is
+read, not searched.
+
+**Fix:** `Combobox` in `gesso-components` (`08a7c30`): filtering ranked
+by label start, word start, anywhere, then keyword; `multiple` with
+removable values; the highlight as `activeDescendant`. Then
+`onQueryChange` and `filter={false}` (`5cae4b4`), so it can search a
+list held elsewhere, which is how the issue page searches 50,000 issues
+in the app worker. Two bugs found in the browser (`7e76ada`): the list
+took the whole window's width, and a press that focused the field left
+a caret, so typing added to the chosen name instead of replacing it.
+
+### 23. There was no gridcell role
+
+**What:** a calendar's days are the cells of an interactive grid, the
+cells that can be `selected`. Gesso had `cell`, a table's.
+
+**Fix:** `gridcell` (`5b3508d`).
+
+### 24. There was no date picker
+
+**What:** the due date.
+
+**Fix:** `DatePicker` in `gesso-components` (`a0b5560`). The value is a
+`YYYY-MM-DD` string, so no time zone puts it a day out. The calendar is
+a dialog whose grid holds focus, with the day under the cursor as its
+`activeDescendant`: arrows by day and week, PageUp and PageDown by month
+(Shift, by year), Home and End, `min` and `max`.
 
 ## Not a bug, now documented
 

@@ -47,4 +47,68 @@ describe('the issue detail service', () => {
     expect(comments).toHaveLength(before + 1);
     expect(comments.at(-1)).toMatchObject({ author: 'Ada Okafor', body: 'Looks good' });
   });
+
+  it('finds issues by key, then by title, never the open one', async () => {
+    const { store, detail } = make();
+    detail.open('WEB-1');
+    detail.find('web-1');
+    const keys = detail.found.value.map(ref => ref.key);
+    expect(keys[0]).toBe('WEB-10');
+    expect(keys).not.toContain('WEB-1');
+    expect(keys.every(key => key.startsWith('WEB-1'))).toBe(true);
+    const title = [...store.issues()].find(issue => issue.key !== 'WEB-1')!.title;
+    detail.find(title.split(' ')[1]!);
+    expect(detail.found.value.length).toBeGreaterThan(0);
+    detail.find('  ');
+    expect(detail.found.value).toEqual([]);
+  });
+
+  it('makes and unmakes sub-issues, one level deep', async () => {
+    const { store, detail } = make();
+    const [a, b, c] = [...store.issues()].filter(issue => issue.parentId === null && store.childrenOf(issue.id).length === 0).slice(0, 3);
+    detail.open(a!.key);
+    detail.addChild(b!.key);
+    let read = (await firstValueFrom(detail.detail))!;
+    expect(read.children.map(ref => ref.key)).toEqual([b!.key]);
+    // A sub-issue can't take sub-issues of its own.
+    detail.open(b!.key);
+    detail.addChild(c!.key);
+    expect(store.get(c!.id)!.parentId).toBeNull();
+    read = (await firstValueFrom(detail.detail))!;
+    expect(read.parent?.key).toBe(a!.key);
+    expect(read.activity.at(-1)!.text).toBe(`Ada Okafor made this a sub-issue of ${a!.key}`);
+    detail.setParent(null);
+    expect(store.get(b!.id)!.parentId).toBeNull();
+    detail.open(a!.key);
+    detail.addChild(b!.key);
+    detail.removeChild(b!.key);
+    expect(store.childrenOf(a!.id)).toEqual([]);
+  });
+
+  it('links issues and reads each link from its own end', async () => {
+    const { store, detail } = make();
+    detail.open('WEB-2');
+    const other = [...store.issues()].find(issue => issue.key === 'API-3')!;
+    detail.link('API-3', 'blocked-by');
+    let read = (await firstValueFrom(detail.detail))!;
+    const link = read.links.find(row => row.other.key === 'API-3')!;
+    expect(link.phrase).toBe('Blocked by');
+    expect(read.activity.at(-1)!.text).toBe('Ada Okafor marked this as blocked by API-3');
+    detail.open(other.key);
+    read = (await firstValueFrom(detail.detail))!;
+    expect(read.links.find(row => row.other.key === 'WEB-2')!.phrase).toBe('Blocks');
+    detail.unlink(link.id);
+    read = (await firstValueFrom(detail.detail))!;
+    expect(read.links.some(row => row.other.key === 'WEB-2')).toBe(false);
+  });
+
+  it('describes an estimate and a due date in words', async () => {
+    const { detail } = make();
+    detail.open('WEB-3');
+    detail.update({ estimate: 3 }, 'Estimate');
+    detail.update({ dueDate: '2026-11-02' }, 'Due');
+    detail.update({ dueDate: null }, 'Undue');
+    const texts = (await firstValueFrom(detail.detail))!.activity.map(row => row.text).slice(-3);
+    expect(texts).toEqual(['Ada Okafor estimated this at 3 points', 'Ada Okafor set the due date to Nov 2, 2026', 'Ada Okafor removed the due date']);
+  });
 });

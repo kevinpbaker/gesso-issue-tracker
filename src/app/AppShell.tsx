@@ -39,7 +39,9 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
     <column flexGrow={1} minWidth={0} width={percent(100)} height={percent(100)} x="stretch" role="main" label="Main">
       <TopBar />
       <box height={1} backgroundColor="border" />
-      <box flexGrow={1} minWidth={0} x="stretch" y="stretch">
+      {/* minHeight 0 too: without it a page taller than the window sets the
+          box's minimum height, and the page's own scroll view never scrolls. */}
+      <box flexGrow={1} minWidth={0} minHeight={0} x="stretch" y="stretch">
         {inputs.outlet as UiChild}
       </box>
     </column>

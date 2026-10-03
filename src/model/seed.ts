@@ -1,4 +1,4 @@
-import type { Comment, Issue, Label, Priority, Project, Team, User, Workspace, WorkflowState } from './types';
+import type { Comment, Issue, IssueRelation, Label, Priority, Project, Team, User, Workspace, WorkflowState } from './types';
 
 /**
  * A deterministic workspace.
@@ -119,8 +119,19 @@ export interface SeedOptions {
   readonly issues?: number;
 }
 
+const ESTIMATES = [1, 2, 3, 5, 8];
+const RELATION_KINDS: readonly IssueRelation['kind'][] = ['related', 'related', 'blocks', 'duplicates'];
+
+/** A calendar date `days` after an epoch time, as `YYYY-MM-DD`. */
+function dateAfter(time: number, days: number): string {
+  return new Date(time + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 export function seedWorkspace({ seed = 1, issues = 50_000 }: SeedOptions = {}): Workspace {
   const next = random(seed);
+  // Fields added after the first seed draw from a stream of their own, so
+  // every issue the first stream made stays exactly as it was.
+  const later = random(seed ^ 0x5eed);
   const users: User[] = PEOPLE.map((name, index) => ({
     id: `u${index}`,
     name,
@@ -134,6 +145,7 @@ export function seedWorkspace({ seed = 1, issues = 50_000 }: SeedOptions = {}): 
   const start = Date.UTC(2026, 0, 1);
   const list: Issue[] = [];
   const comments: Comment[] = [];
+  const relations: IssueRelation[] = [];
   /** The next rank in each state: issues start in generation order, a gap of 1024 apart. */
   const ranks = new Map<string, number>();
 
@@ -153,6 +165,27 @@ export function seedWorkspace({ seed = 1, issues = 50_000 }: SeedOptions = {}): 
     const rank = (ranks.get(stateId) ?? 0) + 1024;
     ranks.set(stateId, rank);
     const teamProjects = projects.filter(project => project.teamId === team.id);
+    const estimate = later() < 0.6 ? pick(later, ESTIMATES) : null;
+    const dueDate = later() < 0.2 ? dateAfter(createdAt, 7 + Math.floor(later() * 60)) : null;
+    // A sub-issue of a recent issue in the same team that isn't one itself.
+    let parentId: string | null = null;
+    if (later() < 0.08) {
+      for (let back = list.length - 1; back >= Math.max(0, list.length - 40); back -= 1) {
+        const candidate = list[back]!;
+        if (candidate.teamId === team.id && candidate.parentId === null) {
+          parentId = candidate.id;
+          break;
+        }
+      }
+    }
+    if (later() < 0.05 && list.length > 0) {
+      relations.push({
+        id: `r${relations.length}`,
+        fromId: `i${index}`,
+        toId: list[Math.floor(later() * list.length)]!.id,
+        kind: pick(later, RELATION_KINDS)
+      });
+    }
     list.push({
       id: `i${index}`,
       key: `${team.key}-${number}`,
@@ -165,6 +198,9 @@ export function seedWorkspace({ seed = 1, issues = 50_000 }: SeedOptions = {}): 
       priority: Math.floor(next() * 5) as Priority,
       assigneeId: next() < 0.15 ? null : pick(next, users).id,
       labelIds: [...labelIds],
+      estimate,
+      dueDate,
+      parentId,
       createdAt,
       updatedAt: createdAt + Math.floor(next() * 30) * 86_400_000
     });
@@ -180,5 +216,5 @@ export function seedWorkspace({ seed = 1, issues = 50_000 }: SeedOptions = {}): 
     }
   }
 
-  return { teams: TEAMS, projects, states: STATES, users, labels, issues: list, comments };
+  return { teams: TEAMS, projects, states: STATES, users, labels, issues: list, comments, relations };
 }
