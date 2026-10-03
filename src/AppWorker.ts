@@ -16,6 +16,7 @@ import { IndexedDbStorage } from 'gesso-framework/worker';
 
 import { Preferences } from './app/PreferencesContract';
 import { PreferencesStore } from './app/PreferencesStore';
+import { preferencesSource } from './app/preferencesSource';
 import { WorkspaceMeta } from './app/WorkspaceContract';
 import { workspaceSource } from './app/workspaceSource';
 import { Board } from './board/BoardContract';
@@ -60,17 +61,7 @@ const reset = (): void => {
 
 serveChannels([
   { token: WorkspaceMeta, source: workspaceSource(store.workspace, ME) },
-  {
-    token: Preferences,
-    source: {
-      view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen, tourDone: preferences.tourDone },
-      commands: {
-        setTheme: theme => preferences.setTheme(theme),
-        setSidebarSplit: split => preferences.setSidebarSplit(split),
-        setSidebarOpen: open => preferences.setSidebarOpen(open)
-      }
-    }
-  },
+  { token: Preferences, source: preferencesSource(preferences) },
   { token: Board, source: boardSource(createBoardStore(store)) },
   { token: Issues, source: issuesSource(new IssueQueryService(store, search), store, reset) },
   { token: IssueDetailChannel, source: detailSource(detail) },

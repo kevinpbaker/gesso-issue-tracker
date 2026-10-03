@@ -24,6 +24,7 @@ import { Views } from '../views/ViewsContract';
 import { ViewsStore } from '../views/ViewsStore';
 import { Preferences } from './PreferencesContract';
 import { PreferencesStore } from './PreferencesStore';
+import { preferencesSource } from './preferencesSource';
 import { AppRoot, ROUTES, TeamIssues } from './routes';
 import { ShortcutsService } from './ShortcutsService';
 import { WorkspaceMeta } from './WorkspaceContract';
@@ -57,18 +58,7 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   const palette = new PaletteService(store);
   served = serveForTest([
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
-    {
-      token: Preferences,
-      source: {
-        view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen, tourDone: preferences.tourDone },
-        commands: {
-          setTheme: theme => preferences.setTheme(theme),
-          setSidebarSplit: split => preferences.setSidebarSplit(split),
-          setSidebarOpen: open => preferences.setSidebarOpen(open),
-          setTourDone: done => preferences.setTourDone(done)
-        }
-      }
-    },
+    { token: Preferences, source: preferencesSource(preferences) },
     { token: Board, source: boardSource(createBoardStore(store)) },
     { token: Issues, source: issuesSource(new IssueQueryService(store), store, () => store.reset()) },
     { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) },
@@ -144,6 +134,32 @@ it('walks a first visit through the workflow, a step at a time as each is done',
   ui.fireEvent.click(ui.getByRole('button', { name: 'End the tour' }));
   await settle();
   expect(ui.queryByRole('region', { name: 'Tour' })).toBeNull();
+});
+
+describe('finishing the tour on its last step', () => {
+  async function toLastStep(): Promise<void> {
+    await mount('/team/web/list');
+    for (let at = 1; at < 7; at++) {
+      ui.fireEvent.click(ui.getByRole('button', { name: 'Next step' }));
+      await settle();
+    }
+    expect(textOf(ui.getByRole('region', { name: 'Tour' }))).toContain('7 of 7');
+  }
+
+  it('puts it away when Done is clicked', async () => {
+    await toLastStep();
+    ui.fireEvent.click(ui.getByRole('button', { name: 'Finish the tour' }));
+    await settle();
+    expect(ui.queryByRole('region', { name: 'Tour' })).toBeNull();
+  });
+
+  it('puts it away when Done is pressed with Enter', async () => {
+    await toLastStep();
+    ui.fireEvent.focus(ui.getByRole('button', { name: 'Finish the tour' }));
+    ui.fireEvent.press('Enter');
+    await settle();
+    expect(ui.queryByRole('region', { name: 'Tour' })).toBeNull();
+  });
 });
 
 it('lays a list scroll out from the list, not from the shell', async () => {
