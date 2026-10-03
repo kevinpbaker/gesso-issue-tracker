@@ -128,10 +128,17 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | const pageSize = 50; |  |  |
 | StaticText | Stored markdown |  |  |
 | StaticText | Markdown source |  |  |
+| region | Tour |  |  |
+| StaticText | Tour · 1 of 7 |  |  |
+| status | Triage from the keyboard | live=polite, atomic=true, relevant=additions text |  |
+| StaticText | Triage from the keyboard |  |  |
+| StaticText | The list has focus. Move with j and k (or the arrows), and press x to select an issue. |  |  |
+| button | End the tour |  |  |
+| button | Next step |  |  |
 
 ## Controls
 
-48 controls (button, checkbox, radio, textbox, link), every one of them named.
+50 controls (button, checkbox, radio, textbox, link), every one of them named.
 
 ## Tab order
 
@@ -173,5 +180,7 @@ accessibility tree reports focus after each press.
 33. checkbox 'Reproduced locally'
 34. checkbox 'Fix has a regression test'
 35. checkbox 'Triaged'
+36. button 'End the tour'
+37. button 'Next step'
 
 Every control above is in this list.

@@ -17,6 +17,7 @@ import { WorkspaceMeta } from './WorkspaceContract';
 import { BUILT_IN_VIEWS } from './Sidebar';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { Tour } from './Tour';
 
 /**
  * The layout every screen renders inside: a sidebar, a top bar, and
@@ -76,6 +77,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         theme('light', 'Use the light theme'),
         theme('dark', 'Use the dark theme'),
         theme('system', 'Follow the system theme'),
+        { id: 'tour', label: 'Take the tour', group: 'Help', keywords: 'guide help start introduction', run: () => prefs.send.setTourDone(false) },
         { id: 'reset', label: 'Reset the workspace to its seed', group: 'Workspace', keywords: 'start over clear', run: () => issues.send.reset() }
       ];
     })
@@ -179,6 +181,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
           </row>
         );
       })}
+      <Tour />
     </row>
   );
 }

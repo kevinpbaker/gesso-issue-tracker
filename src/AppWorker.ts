@@ -63,7 +63,7 @@ serveChannels([
   {
     token: Preferences,
     source: {
-      view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen },
+      view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen, tourDone: preferences.tourDone },
       commands: {
         setTheme: theme => preferences.setTheme(theme),
         setSidebarSplit: split => preferences.setSidebarSplit(split),

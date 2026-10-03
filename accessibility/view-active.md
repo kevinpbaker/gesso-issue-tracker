@@ -130,51 +130,60 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | option | OPS-3240 Investigate team invitations for admins, In Progress, Ada Okafor |  |  |
 | option | WEB-3269 Refactor rate limiting after a timezone change, In Progress, Ada Okafor |  |  |
 | option | MOB-3380 Remove dark mode contrast in the mobile layout, In Progress, Ada Okafor |  |  |
+| region | Tour |  |  |
+| StaticText | Tour · 1 of 7 |  |  |
+| status | Triage from the keyboard | live=polite, atomic=true, relevant=additions text |  |
+| StaticText | Triage from the keyboard |  |  |
+| StaticText | The list has focus. Move with j and k (or the arrows), and press x to select an issue. |  |  |
+| button | End the tour |  |  |
+| button | Next step |  |  |
 
 ## Controls
 
-55 controls (button, radio, textbox, combobox, option, link), every one of them named.
+57 controls (button, radio, textbox, combobox, option, link), every one of them named.
 
 ## Tab order
 
 What the Tab key reaches from the top of the route, in order, as the
 accessibility tree reports focus after each press.
 
-1. link 'My issues'
-2. link 'Web'
-3. link 'Web board'
-4. link 'Platform API'
-5. link 'Platform API board'
-6. link 'Mobile'
-7. link 'Mobile board'
-8. link 'Operations'
-9. link 'Operations board'
-10. link 'All issues'
-11. link 'Active'
-12. link 'Backlog'
-13. link 'Urgent'
-14. link 'Q3 launch, Web'
-15. link 'Billing v2, Web'
-16. link 'Onboarding refresh, Web'
-17. link 'Q3 launch, Platform API'
-18. link 'Billing v2, Platform API'
-19. link 'Onboarding refresh, Platform API'
-20. link 'Q3 launch, Mobile'
-21. link 'Billing v2, Mobile'
-22. link 'Onboarding refresh, Mobile'
-23. link 'Q3 launch, Operations'
-24. link 'Billing v2, Operations'
-25. link 'Onboarding refresh, Operations'
-26. link 'Sample document'
-27. link '5,000 lines'
-28. radiogroup 'Appearance'
-29. separator 'Sidebar'
-30. button 'New issue'
-31. combobox 'Group by'
-32. combobox 'Sort by'
-33. button 'Save as a view'
-34. textbox 'Search issues'
-35. combobox 'Add a filter'
-36. listbox 'Issues'
+1. button 'End the tour'
+2. button 'Next step'
+3. link 'My issues'
+4. link 'Web'
+5. link 'Web board'
+6. link 'Platform API'
+7. link 'Platform API board'
+8. link 'Mobile'
+9. link 'Mobile board'
+10. link 'Operations'
+11. link 'Operations board'
+12. link 'All issues'
+13. link 'Active'
+14. link 'Backlog'
+15. link 'Urgent'
+16. link 'Q3 launch, Web'
+17. link 'Billing v2, Web'
+18. link 'Onboarding refresh, Web'
+19. link 'Q3 launch, Platform API'
+20. link 'Billing v2, Platform API'
+21. link 'Onboarding refresh, Platform API'
+22. link 'Q3 launch, Mobile'
+23. link 'Billing v2, Mobile'
+24. link 'Onboarding refresh, Mobile'
+25. link 'Q3 launch, Operations'
+26. link 'Billing v2, Operations'
+27. link 'Onboarding refresh, Operations'
+28. link 'Sample document'
+29. link '5,000 lines'
+30. radiogroup 'Appearance'
+31. separator 'Sidebar'
+32. button 'New issue'
+33. combobox 'Group by'
+34. combobox 'Sort by'
+35. button 'Save as a view'
+36. textbox 'Search issues'
+37. combobox 'Add a filter'
+38. listbox 'Issues'
 
 Every control above is in this list.

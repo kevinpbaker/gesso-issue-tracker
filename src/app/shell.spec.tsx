@@ -50,6 +50,8 @@ afterEach(() => {
 async function mount(url: string, width = 1280, height = 713): Promise<void> {
   const store = new IssueStore(seedWorkspace({ issues: 400 }));
   const preferences = new PreferencesStore(disk);
+  // As the app worker does at start: nothing saved, so a first visit.
+  void preferences.restore();
   const compose = new ComposeService(store, disk, 'u0');
   const views = new ViewsStore(disk);
   const palette = new PaletteService(store);
@@ -58,11 +60,12 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
     {
       token: Preferences,
       source: {
-        view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen },
+        view: { theme: preferences.theme, sidebarSplit: preferences.sidebarSplit, sidebarOpen: preferences.sidebarOpen, tourDone: preferences.tourDone },
         commands: {
           setTheme: theme => preferences.setTheme(theme),
           setSidebarSplit: split => preferences.setSidebarSplit(split),
-          setSidebarOpen: open => preferences.setSidebarOpen(open)
+          setSidebarOpen: open => preferences.setSidebarOpen(open),
+          setTourDone: done => preferences.setTourDone(done)
         }
       }
     },
@@ -84,6 +87,18 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   ui.runtime.services.get(RouterService).setRoutes({ routes: ROUTES, notFound: TeamIssues });
   ui.runtime.services.get(RouterService).navigate(url);
   await settle();
+}
+
+/** Every text a node's subtree draws, joined. */
+function textOf(node: { firstChild: unknown }): string {
+  const parts: string[] = [];
+  const walk = (n: any): void => {
+    const text = n.properties?.get?.('text');
+    if (typeof text === 'string') parts.push(text);
+    for (let c = n.firstChild; c !== null; c = c.nextSibling) walk(c);
+  };
+  walk(node);
+  return parts.join(' ');
 }
 
 async function settle(): Promise<void> {
@@ -109,6 +124,26 @@ it('raises the contrast without moving anything', async () => {
   ui.runtime.resize(1280, 713);
   await settle();
   expect({ bar: bar(), list: list() }).toEqual(before);
+});
+
+it('walks a first visit through the workflow, a step at a time as each is done', async () => {
+  await mount('/team/web/list');
+  const step = () => textOf(ui.getByRole('region', { name: 'Tour' }));
+  expect(step()).toContain('1 of 7');
+  ui.fireEvent.press('x');
+  await settle();
+  expect(step()).toContain('2 of 7');
+  ui.fireEvent.press('Enter');
+  await settle();
+  expect(ui.runtime.services.get(RouterService).url.value).toMatch(/^\/issue\//);
+  expect(step()).toContain('3 of 7');
+  // Next skips a step; ending it puts it away for good.
+  ui.fireEvent.click(ui.getByRole('button', { name: 'Next step' }));
+  await settle();
+  expect(step()).toContain('4 of 7');
+  ui.fireEvent.click(ui.getByRole('button', { name: 'End the tour' }));
+  await settle();
+  expect(ui.queryByRole('region', { name: 'Tour' })).toBeNull();
 });
 
 it('lays a list scroll out from the list, not from the shell', async () => {

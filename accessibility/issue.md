@@ -180,10 +180,17 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | ▾ |  |  |
 | StaticText | Parent issue |  |  |
 | combobox | Parent issue | hasPopup=listbox, required=false, expanded=false |  |
+| region | Tour |  |  |
+| StaticText | Tour · 1 of 7 |  |  |
+| status | Triage from the keyboard | live=polite, atomic=true, relevant=additions text |  |
+| StaticText | Triage from the keyboard |  |  |
+| StaticText | The list has focus. Move with j and k (or the arrows), and press x to select an issue. |  |  |
+| button | End the tour |  |  |
+| button | Next step |  |  |
 
 ## Controls
 
-62 controls (button, checkbox, radio, textbox, combobox, link), every one of them named.
+64 controls (button, checkbox, radio, textbox, combobox, link), every one of them named.
 
 ## Tab order
 
@@ -239,5 +246,7 @@ accessibility tree reports focus after each press.
 47. combobox 'Estimate'
 48. combobox 'Due date'
 49. combobox 'Parent issue'
+50. button 'End the tour'
+51. button 'Next step'
 
 Every control above is in this list.

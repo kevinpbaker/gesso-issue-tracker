@@ -18,9 +18,10 @@ describe('preferences', () => {
     const first = new PreferencesStore(disk);
     first.setTheme('dark');
     first.setSidebarOpen(false);
+    first.setTourDone(true);
     const second = new PreferencesStore(disk);
     await second.restore();
-    expect(second.state.value).toMatchObject({ theme: 'dark', sidebarOpen: false });
+    expect(second.state.value).toMatchObject({ theme: 'dark', sidebarOpen: false, tourDone: true });
   });
 
   it('clamp the sidebar and ignore nonsense', async () => {
@@ -28,6 +29,6 @@ describe('preferences', () => {
     disk.records.set('preferences-v1', JSON.stringify({ theme: 'purple', sidebarSplit: 5 }));
     const store = new PreferencesStore(disk);
     await store.restore();
-    expect(store.state.value).toEqual({ theme: 'system', sidebarSplit: 0.4, sidebarOpen: true });
+    expect(store.state.value).toEqual({ theme: 'system', sidebarSplit: 0.4, sidebarOpen: true, tourDone: false });
   });
 });
