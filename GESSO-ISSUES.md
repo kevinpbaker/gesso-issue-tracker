@@ -4,11 +4,11 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `7e76ada`. Not yet pushed or released. Every
+per fix, `2c572e3` through `d356006`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 24) were checked with their packages'
+build. The ones since (16 to 25) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now.
 
@@ -362,6 +362,18 @@ cells that can be `selected`. Gesso had `cell`, a table's.
 a dialog whose grid holds focus, with the day under the cursor as its
 `activeDescendant`: arrows by day and week, PageUp and PageDown by month
 (Shift, by year), Home and End, `min` and `max`.
+
+### 25. A press between a document's lines went nowhere
+
+**What:** in the issue page's description, a press in the editor's
+padding or in the gap between two blocks focused nothing, so what was
+typed next was lost. A document puts the caret on the nearest line.
+
+**Fix:** a press inside an editing group that lands on none of its
+fields goes to the nearest field by height (`d356006`); a press on a button
+or anything with its own click listener is left to it. The tracker also
+made each block the line's full width, so a press past the end of a
+short line lands in that line.
 
 ## Not a bug, now documented
 
