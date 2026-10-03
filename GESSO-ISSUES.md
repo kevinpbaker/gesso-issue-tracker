@@ -4,7 +4,7 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `444371c`. Not yet pushed or released. Every
+per fix, `2c572e3` through `5d67836`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passes with them: format,
 lint, types, 4,468 tests, build, API reports and the docs build.
@@ -192,10 +192,14 @@ out exactly as a full rebuild would" (300 random edits, checked against
 a full rebuild and against what a mirror shows) and "keeps what it did
 not touch".
 
+Then the store itself: records kept by id with each record's children
+in order, and an index worked out only for a record being sent, so an
+insertion no longer renumbers everything after it (`5d67836`).
+
 **After:** in a production build in Chrome, an Enter in the 5,000-line
-document takes 15 to 18 ms a frame: about 6 ms of layout and 7 to 10 ms
-of semantics. Both are now single cheap passes over the document, not
-re-placement or re-description.
+document takes 7 to 14 ms a frame, with about 3 to 6 ms of semantics. It
+was 15 to 18 ms with 7 to 10 ms of semantics, and 18 ms with 11 ms
+before the scoped rebuild.
 
 ## Not a bug, now documented
 
@@ -222,13 +226,6 @@ re-placement or re-description.
      single-editable editor.
   2. A selection model that spans editables, built on the existing
      cross-node selection for static text.
-- **Semantics still makes a pass over every record on a structural
-  change.** Each record stores its index among its siblings, so an
-  insertion renumbers every record after it, and the store is a
-  document-ordered map rebuilt around the change. That's the 7 to 10 ms
-  above. Getting it in proportion to the change means storing children
-  as per-parent lists and working out indices only for the records
-  that are sent.
 - **Percentage widths going stale in lazy rows.** Seen once in Phase 0
   and never reproduced since. A percentage-width row asked the same
   question after a resize got its old width back, which is exactly the

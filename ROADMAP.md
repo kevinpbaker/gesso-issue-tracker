@@ -46,7 +46,7 @@ out precisely where and why.
   tests. It has one undo history for the whole document, in which a
   markdown shortcut is its own step. It renders in chunks. In a
   production build in Chrome, a keystroke in the 5,000-line document
-  takes 7.5 to 10 ms a frame and an Enter about 18 ms. Left: cross-block
+  takes 7.5 to 10 ms a frame and an Enter 7 to 14 ms. Left: cross-block
   selection, Mod+B/I/K, the slash menu, view source, paste and copy,
   mentions as chips, and IME testing.
 - **Gesso problems:** everything found so far is logged in
