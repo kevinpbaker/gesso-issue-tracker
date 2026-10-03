@@ -4,17 +4,18 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `3ddfcd2` (another session's commits are
+per fix, `2c572e3` through `aa33728` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 55) were checked with their packages'
+build. The ones since (16 to 57) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now. After 51, the whole
-test suite passed: 4,691 tests; after 55, 4,711.
+test suite passed: 4,691 tests; after 55, 4,711; after 57, 4,754, with
+the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -701,6 +702,38 @@ elements for the same reason, without `Button`'s look.
 
 **Fix:** `Button` takes `tabStop` (default true), passed to the element
 (`d1fec43`). The step buttons set it false.
+
+### 57. An editable's runs couldn't hide the markdown markers
+
+**What:** an editable's `spans` must spell its text exactly, so the
+editor kept `**`, `_`, backticks, `~~` and a link's `[`, `](url)` in
+every block, drawn muted. Live preview (Obsidian, Typora) hides them
+everywhere but the block being edited, and there was no way to keep a
+character in the text without drawing it. Two smaller faults turned up
+on the way: a field with runs measured its caret in its own font, so a
+caret after a bold run sat short of the glyphs; and an IME composition
+dropped a field's runs until the commit, since the application's runs
+don't include the composing text.
+
+**Fix:** a span can be `hidden` (`b502e0e`). Its characters stay in
+the text (offsets, copy, undo, the semantics mirror) but take no room
+and aren't drawn, and the caret steps over each stretch as one unit:
+an arrow crosses one visible character and the markers in its way,
+stopping on the side nearest where it started; Backspace after
+`**bold**` deletes the `d` and keeps the markers; a press before the
+boundary the markers sit at lands before them, one past it after; a
+double click selects the word as drawn. Caret geometry is measured run
+by run, and a composition moves the runs to make room instead of
+dropping them. Docs: rich text, "Hidden runs".
+
+A press that moved focus was then resolved against the layout focus
+caused: the editor shows a block's markers when it takes focus, and a
+click after `**bold** wo` landed between the closing asterisks. The
+press's offset is now read before focus moves (`aa33728`).
+
+The tracker's `inlineRuns` takes `hideMarkers`, and each block hides
+its markers until it has focus. A screen reader still hears the
+markers, since the proxy holds the whole text; Phase 9.
 
 ### Tooling
 

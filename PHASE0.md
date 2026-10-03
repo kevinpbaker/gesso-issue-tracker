@@ -107,7 +107,8 @@ checked by hand in Chrome:
   ranges of the string being typed, so `**bold**`, `_italic_`,
   `` `code` ``, `~~strike~~`, links, `@mentions` and `WEB-1042`
   references render styled as you type them. Gesso requires the spans
-  to spell the text exactly, so the markers stay visible, drawn muted.
+  to spell the text exactly, so the markers stay in the text: muted in
+  the block with the caret, hidden everywhere else (see §4.4).
   2,000 random strings confirm the styler always covers the source.
 - **Markdown shortcuts.** `# `, `## `, `- `, `1. `, `[ ] `, `> `,
   three backticks and `---` convert the block as you type them.
@@ -203,12 +204,16 @@ Mounting the 5,000-line document costs one 114 ms frame (layout
 - **IME composition across a block boundary.** There's no IME in the
   test harness. Phase 5 must test Japanese and Chinese input by hand,
   in particular pressing Enter mid-composition.
-- **Hiding markers.** Spans can't drop characters, so hiding `**`
-  means drawing the markers at near-zero size and teaching the caret
-  to step over them. That's possible in principle but untried. Showing
-  the markers muted, as the spike does, is a defensible design in its
-  own right (Bear and Typora both offer it), so this is a product
-  decision as much as an engine one.
+- **Hiding markers.** Done. Gesso spans can now be `hidden`: the
+  characters stay in the text but take no room, aren't drawn, and the
+  caret steps over them as one unit (Gesso issue 57). `inlineRuns`
+  takes `hideMarkers`, and `MarkdownEditor`'s `BlockView` hides the
+  markers in every block but the one with focus, which shows them
+  muted, as Obsidian's live preview does. Showing them rewraps that
+  block only. A press into a block lands where it was pressed in the
+  hidden-marker layout, before the markers show; `MarkdownEditor.spec.tsx`
+  ("hidden markers") pins it. Comments (`MarkdownView`) still drop the
+  markers outright with `readingRuns`, since nothing there is edited.
 - **Screen readers.** Each block is a labeled textbox ("Heading level
   2", "Task"), which is a reasonable start. A real reader comes in
   Phase 9.
