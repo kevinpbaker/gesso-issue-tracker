@@ -100,6 +100,18 @@ describe('the issue list from the keyboard', () => {
     expect(h.service.selectedIds()).toHaveLength(0);
   });
 
+  it('clears the selection from its toolbar, and the caret goes back to the list', async () => {
+    await mount();
+    const list = h.ui.getByRole('listbox', { name: 'Issues' });
+    await press('x');
+    h.ui.fireEvent.focus(h.ui.getByRole('button', { name: 'Clear selection' }));
+    // Enter is the button's: it clears, and doesn't open the issue under the cursor.
+    await press('Enter');
+    expect(h.service.selectedIds()).toHaveLength(0);
+    expect(h.ui.queryByRole('toolbar', { name: 'Selected issues' })).toBeNull();
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(list);
+  });
+
   it('moves with j and k before selecting', async () => {
     await mount();
     await press('j');
@@ -220,6 +232,19 @@ describe('the filter bar', () => {
     await settle();
     expect(router().url.value).toBe('/team/web/list');
     expect(total().refine).toBeUndefined();
+  });
+
+  it('keeps the caret when a filter is taken off, or all of them', async () => {
+    await at('/team/web/list?priority=1&label=l0');
+    const menu = () => h.ui.getByRole('combobox', { name: 'Add a filter' });
+    h.ui.fireEvent.focus(h.ui.getByRole('button', { name: 'Remove the priority filter' }));
+    await press('Enter');
+    expect(router().url.value).toBe('/team/web/list?label=l0');
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(menu());
+    h.ui.fireEvent.focus(h.ui.getByRole('button', { name: 'Clear the filters' }));
+    await press('Enter');
+    expect(router().url.value).toBe('/team/web/list');
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(menu());
   });
 
   it('saves the list, filter and all, as a named view and opens it', async () => {

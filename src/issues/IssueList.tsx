@@ -3,7 +3,7 @@ import { distinctUntilChanged, map } from 'rxjs/operators';
 
 import { autoFocus, focusRing, interactive, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
 import { Button, Select } from 'gesso-components';
-import { formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { FocusService, formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { ShortcutsService } from '../app/ShortcutsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
@@ -242,8 +242,10 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
 
   const key = (keys: string, label: string, run: () => void) => shortcut({ registry, keys, label, scoped: false, group: 'List', run });
 
+  let listNode: UiNode | null = null;
   const list = LazyColumn(
     {
+      ref: (node: UiNode | null) => (listNode = node),
       flexGrow: 1,
       flexBasis: 0,
       count: issues.view.summary.pipe(map(displayCount)),
@@ -334,7 +336,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
         )
       )}
       {list}
-      <BulkBar />
+      <BulkBar list={() => listNode} />
     </column>
   );
 }
@@ -522,10 +524,28 @@ function IssueRowView(
  * Each choice is one transaction in the app worker, so one Mod+Z puts
  * back all of it, however many issues it touched.
  */
-function BulkBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
+function BulkBar(inputs: Inputs<{ list: () => UiNode | null }>, ctx: ComponentContext) {
   const issues = ctx.channel(Issues);
   const meta = ctx.channel(WorkspaceMeta);
+  const focus = ctx.inject(FocusService);
   const count = issues.view.selectedCount;
+
+  // The bar leaves when the selection empties, and with it whatever
+  // control in it had the caret (Clear, most often): the caret goes back
+  // to the list. Subscribed before the bar's children are, so it runs
+  // while the focused control is still in the bar.
+  let barNode: UiNode | null = null;
+  ctx.effect(count.pipe(map(n => n > 0), distinctUntilChanged()), shown => {
+    const held = focus.focused.value;
+    const list = inputs.list.value();
+    if (shown || list === null || held === null || barNode === null) return;
+    for (let at: UiNode | null = held; at !== null; at = at.parent) {
+      if (at === barNode) {
+        focus.focus(list);
+        return;
+      }
+    }
+  });
   const plural = (n: number) => `${n.toLocaleString('en-US')} issue${n === 1 ? '' : 's'}`;
   const name = <T extends { id: string; name: string }>(list: readonly T[], id: string) => list.find(item => item.id === id)?.name ?? id;
 
@@ -535,7 +555,7 @@ function BulkBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   // Left out of the tree, not hidden: \`visible={false}\` keeps a node's
   // space, and the list would end 53px above the window's edge.
   const bar = () => (
-    <column key="bar" role="toolbar" label="Selected issues">
+    <column key="bar" role="toolbar" label="Selected issues" ref={node => (barNode = node)}>
       <box height={1} backgroundColor="border" />
       <row height={52} paddingLeft={16} paddingRight={16} gap={10} y="center" backgroundColor="surface">
         <text text={count.pipe(map(n => `${plural(n)} selected`))} fontSize={13} fontWeight={600} color="text" flexGrow={1} />

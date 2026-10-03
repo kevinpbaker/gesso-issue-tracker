@@ -1,9 +1,9 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { autoFocus, percent, type UiChild } from 'gesso-core';
+import { autoFocus, percent, type UiChild, type UiNode } from 'gesso-core';
 import { Button, Combobox, Select, TextInput, type ComboboxOption, type SelectOption } from 'gesso-components';
-import { internalState, type ComponentContext, type Inputs } from 'gesso-framework';
+import { FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { NONE, type DuePreset, type IssueFilter } from '../model/query';
@@ -103,6 +103,13 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
   const adding = internalState<readonly Dimension[]>([]);
   /** The one just added, whose control takes the caret. */
   const fresh = internalState<Dimension | null>(null);
+  // A button that takes a filter off takes itself away too, so the
+  // caret goes to the menu that's always there instead of to nothing.
+  const focusService = ctx.inject(FocusService);
+  let addMenu: UiNode | null = null;
+  const toMenu = (): void => {
+    if (addMenu !== null) focusService.focus(addMenu);
+  };
 
   const shown = combineLatest([inputs.filter, adding]).pipe(
     map(([filter, added]) => DIMENSIONS.filter(d => has(filter, d.value) || added.includes(d.value)).map(d => d.value)),
@@ -196,6 +203,7 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
           variant="plain"
           label={`Remove the ${name.toLowerCase()} filter`}
           onClick={() => {
+            toMenu();
             adding.value = adding.value.filter(d => d !== dimension);
             change(without(current(), dimension));
           }}>
@@ -229,6 +237,7 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
         labelHidden
         compact
         placeholder="+ Filter"
+        ref={node => (addMenu = node)}
         value=""
         options={shown.pipe(map(list => DIMENSIONS.filter(d => !list.includes(d.value))))}
         onChange={dimension => {
@@ -247,6 +256,7 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
                   variant="plain"
                   label="Clear the filters"
                   onClick={() => {
+                    toMenu();
                     adding.value = [];
                     draft.value = '';
                     change({});

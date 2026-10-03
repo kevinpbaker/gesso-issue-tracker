@@ -1,11 +1,11 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { autoFocus, breakpoint, percent, type UiChild } from 'gesso-core';
-
-import { NARROW } from '../app/AppShell';import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
+import { autoFocus, breakpoint, percent, type UiChild, type UiNode } from 'gesso-core';
+import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
 import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
+import { NARROW } from '../app/AppShell';
 import { routeParam } from '../app/params';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { CommandsService } from '../palette/CommandsService';
@@ -268,6 +268,28 @@ function IssueRow(inputs: Inputs<{ issue: IssueRef; prefix?: string; open: (key:
   );
 }
 
+/**
+ * A control to send the caret to, by the node its `ref` last gave.
+ *
+ * A row's remove button removes the row and itself with it, and an
+ * "add" field is made again after each pick so it comes back empty:
+ * either way the control holding the caret leaves, and without a place
+ * to go the caret goes nowhere.
+ */
+function refocus(ctx: ComponentContext): { ref: (node: UiNode | null) => void; focus: () => void } {
+  const service = ctx.inject(FocusService);
+  let node: UiNode | null = null;
+  return {
+    // The old field's null can arrive after the new one's node.
+    ref: next => {
+      if (next !== null) node = next;
+    },
+    focus: () => {
+      if (node !== null) service.focus(node);
+    }
+  };
+}
+
 /** The search for another issue, as combobox options: the key and title, both searchable. */
 function useIssueSearch(ctx: ComponentContext): { options: Observable<readonly ComboboxOption[]>; find: (query: string) => void } {
   const channel = ctx.channel(IssueDetailChannel);
@@ -280,6 +302,7 @@ function useIssueSearch(ctx: ComponentContext): { options: Observable<readonly C
 function SubIssues(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void }>, ctx: ComponentContext) {
   const channel = ctx.channel(IssueDetailChannel);
   const search = useIssueSearch(ctx);
+  const add = refocus(ctx);
   // Re-made after each pick, so the field comes back empty.
   const round = internalState(0);
   const children = inputs.detail.pipe(map(d => d.children));
@@ -304,7 +327,10 @@ function SubIssues(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => 
                 issue={child}
                 open={inputs.open.value}
                 removeLabel={`Remove ${child.key} from sub-issues`}
-                onRemove={() => channel.send.removeChild(child.key)}
+                onRemove={() => {
+                  add.focus();
+                  channel.send.removeChild(child.key);
+                }}
               />
             ))
           )
@@ -316,6 +342,8 @@ function SubIssues(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => 
             ? [
                 <Combobox
                   key={String(n)}
+                  ref={add.ref}
+                  rootModifiers={n > 0 ? [autoFocus()] : []}
                   label="Add a sub-issue"
                   labelHidden
                   placeholder="Add a sub-issue by key or title"
@@ -348,6 +376,7 @@ const LINK_KINDS: readonly SelectOption[] = [
 function Links(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void }>, ctx: ComponentContext) {
   const channel = ctx.channel(IssueDetailChannel);
   const search = useIssueSearch(ctx);
+  const add = refocus(ctx);
   const kind = internalState<string>('related');
   const round = internalState(0);
   const links = inputs.detail.pipe(map(d => d.links));
@@ -364,7 +393,10 @@ function Links(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void
                 prefix={link.phrase}
                 open={inputs.open.value}
                 removeLabel={`Remove the link: ${link.phrase.toLowerCase()} ${link.other.key}`}
-                onRemove={() => channel.send.unlink(link.id)}
+                onRemove={() => {
+                  add.focus();
+                  channel.send.unlink(link.id);
+                }}
               />
             ))
           )
@@ -376,6 +408,8 @@ function Links(inputs: Inputs<{ detail: IssueDetail; open: (key: string) => void
           map(n => (
             <Combobox
               key={String(n)}
+              ref={add.ref}
+              rootModifiers={n > 0 ? [autoFocus()] : []}
               label="Link to an issue"
               labelHidden
               placeholder="Link to an issue by key or title"
@@ -465,6 +499,7 @@ function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partia
   const meta = ctx.channel(WorkspaceMeta);
   const channel = ctx.channel(IssueDetailChannel);
   const search = useIssueSearch(ctx);
+  const parentField = refocus(ctx);
   const issue = inputs.detail.pipe(map(d => d.issue!));
   const update = (patch: Partial<Issue>, label: string): void => inputs.update.value(patch, label);
 
@@ -543,6 +578,7 @@ function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partia
         'Parent issue',
         <Combobox
           label="Parent issue"
+          ref={parentField.ref}
           labelHidden
           placeholder="No parent"
           filter={false}
@@ -559,7 +595,11 @@ function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partia
           parent === null
             ? []
             : [
-                <Button key="unparent" size="small" variant="plain" label="Remove from parent" onClick={() => channel.send.setParent(null)}>
+                <Button key="unparent" size="small" variant="plain" label="Remove from parent"
+                  onClick={() => {
+                    parentField.focus();
+                    channel.send.setParent(null);
+                  }}>
                   <text text="Remove from parent" fontSize={12} color="textMuted" />
                 </Button>
               ]

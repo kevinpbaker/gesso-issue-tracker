@@ -193,6 +193,32 @@ describe('the issue page', () => {
     expect(h.ui.runtime.input.focus.focusedNode).toBe(h.ui.getByRole('textbox', { name: 'Title' }));
   });
 
+  it('keeps the caret somewhere when what held it goes', async () => {
+    const store = fresh();
+    const [target, child, other] = [...store.issues()].filter(i => i.parentId === null && store.childrenOf(i.id).length === 0 && i.teamId === 'web');
+    await mount(store, target!.key);
+    const focused = () => h.ui.runtime.input.focus.focusedNode;
+
+    // A pick makes the field again, empty; the new one has the caret.
+    await focus(control('combobox', 'Add a sub-issue'));
+    await type(child!.key);
+    await press('Enter');
+    expect(focused()).toBe(control('combobox', 'Add a sub-issue'));
+    await focus(control('combobox', 'Link to an issue'));
+    await type(other!.key);
+    await press('Enter');
+    expect(focused()).toBe(control('combobox', 'Link to an issue'));
+
+    // A row's remove button goes with its row; the section's field takes over.
+    await focus(h.ui.getByRole('button', { name: `Remove ${child!.key} from sub-issues` }));
+    await press('Enter');
+    expect(store.childrenOf(target!.id)).toEqual([]);
+    expect(focused()).toBe(control('combobox', 'Add a sub-issue'));
+    await focus(h.ui.getByRole('button', { name: new RegExp(`^Remove the link: .* ${other!.key}$`) }));
+    await press('Enter');
+    expect(focused()).toBe(control('combobox', 'Link to an issue'));
+  });
+
   it('says so when no issue has the key', async () => {
     await mount(fresh(), 'NOPE-1');
     expect(h.ui.getByText('No issue has that key.')).toBeDefined();
