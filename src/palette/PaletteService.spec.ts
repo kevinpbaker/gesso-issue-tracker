@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
-import { PaletteService } from './PaletteService';
+import { PaletteService, RECENT } from './PaletteService';
 
-const make = (issues = 300) => {
-  const service = new PaletteService(new IssueStore(seedWorkspace({ issues })));
+const make = (issues = 300, recent: readonly string[] = []) => {
+  const service = new PaletteService(new IssueStore(seedWorkspace({ issues })), () => recent);
   service.setCatalog([
     { id: 'new', label: 'New issue', group: 'Issues' },
     { id: 'status-done', label: 'Set status: Done', group: 'Selected issues' },
@@ -17,6 +17,26 @@ const make = (issues = 300) => {
 describe('the palette in the app worker', () => {
   it('lists every command, in order, before anything is typed', () => {
     expect(make().rank('').map(item => item.id)).toEqual(['new', 'status-done', 'board']);
+  });
+
+  it('offers the issues opened lately first, newest first, besides the open one and any that are gone', () => {
+    const recent = ['WEB-4', 'WEB-900', 'API-2', 'WEB-1', 'WEB-2', 'API-1', 'WEB-3', 'API-3'];
+    const service = make(300, recent);
+    service.setOpenIssue('web-1');
+    const items = service.rank('');
+    const offered = items.filter(item => item.group === 'Recent');
+    expect(offered).toHaveLength(RECENT);
+    expect(offered.map(item => item.id)).toEqual(['WEB-4', 'API-2', 'WEB-2', 'API-1', 'WEB-3']);
+    expect(offered[0]).toMatchObject({ kind: 'issue', label: expect.stringMatching(/^WEB-4 \S/) });
+    // Then the commands, as before.
+    expect(items.slice(RECENT).map(item => item.id)).toEqual(['new', 'status-done', 'board']);
+    // Off the issue's page, it's offered too.
+    service.setOpenIssue(null);
+    expect(service.rank('')[0]!.id).toBe('WEB-4');
+  });
+
+  it("doesn't offer recent issues once something is typed", () => {
+    expect(make(300, ['WEB-4']).rank('web').some(item => item.group === 'Recent')).toBe(false);
   });
 
   it('ranks commands by fuzzy match, keywords included, and adds the issues that match', () => {

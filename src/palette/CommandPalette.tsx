@@ -14,8 +14,9 @@ import { Palette, type PaletteItem } from './PaletteContract';
  *
  * It lists every command there is (every keyboard shortcut live where
  * focus was, and every command a screen offers) and, once something is
- * typed, the issues whose key or title match. Matching is the app
- * worker's, fuzzy, so `stdn` finds "Set status: Done".
+ * typed, the issues whose key or title match. Before anything is typed,
+ * the issues opened lately come first. Matching is the app worker's,
+ * fuzzy, so `stdn` finds "Set status: Done".
  *
  * Focus stays in the search field; the arrows walk a highlight that is
  * the field's `activeDescendant`, Enter runs it and Escape closes. The
@@ -106,6 +107,7 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     const all = [...shortcuts, ...service.commands().filter(command => !labels.has(command.label))];
     commands = new Map(all.map(command => [command.id, command]));
     palette.send.setCatalog(all.map(({ id, label, group, keywords }) => ({ id, label, group, keywords })));
+    palette.send.setOpenIssue(openIssue(router.url.value));
     query.next('');
     palette.send.search('');
     overlay.show(body(), {
@@ -256,6 +258,12 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
 
 /** How long a command's note stays up. */
 const NOTICE_MS = 2500;
+
+/** The key of the issue whose page is open, from the url; null on any other screen. */
+function openIssue(url: string): string | null {
+  const match = /^\/issue\/([^/?#]+)/.exec(url);
+  return match === null ? null : decodeURIComponent(match[1]!);
+}
 
 function itemKey(item: PaletteItem | undefined): string {
   return item === undefined ? '' : `${item.kind}:${item.id}`;

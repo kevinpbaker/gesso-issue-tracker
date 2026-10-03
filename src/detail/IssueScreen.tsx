@@ -12,6 +12,7 @@ import { ShortcutsService } from '../app/ShortcutsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { CommandsService } from '../palette/CommandsService';
 import { COPY_LINK, copyCommands, propertyCommands } from '../palette/propertyCommands';
+import { Recent } from '../recent/RecentContract';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
@@ -101,6 +102,8 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   );
   /** The issue as the page opened it: the body is made again for each one. */
   const opened = inputs.detail.value.issue;
+  // A view, for the palette's recent issues.
+  if (opened !== null) ctx.channel(Recent).send.viewed(opened.key);
 
   // The description saves a moment after typing stops, and when focus
   // leaves the editor; whatever is pending goes then, once.

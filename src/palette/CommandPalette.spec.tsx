@@ -21,14 +21,16 @@ import { CommandPalette } from './CommandPalette';
 import { CommandsService } from './CommandsService';
 import { Palette, type CatalogEntry } from './PaletteContract';
 import { PaletteService } from './PaletteService';
+import { paletteSource } from './paletteSource';
 
 /**
  * Phase 8's exit criterion, the palette's half: every action can be
  * found in it. Whatever shortcut is live where focus is shows up in its
  * catalog, the selection's commands are there while issues are
  * selected, a fuzzy query finds and runs one, and a key opens an issue.
- * And what a command has to say, such as a copy's "Copied", it shows
- * and reads out.
+ * Opened with nothing typed, it offers the issues seen lately; and what
+ * a command has to say, such as a copy's "Copied", it shows and reads
+ * out.
  */
 
 function Harness(_inputs: Inputs<{}>, ctx: ComponentContext) {
@@ -67,20 +69,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function mount(): Promise<void> {
+async function mount(recent: readonly string[] = []): Promise<void> {
   const store = new IssueStore(seedWorkspace({ issues: 400 }));
   const service = new IssueQueryService(store);
-  const palette = new PaletteService(store);
+  const palette = new PaletteService(store, () => recent);
   const setCatalog = vi.spyOn(palette, 'setCatalog');
   const views = new ViewsStore({ read: async () => ({ outcome: 'ok', value: null }), write: async () => 'ok', remove: async () => 'ok' });
   const served = serveForTest([
     { token: Issues, source: issuesSource(service, store, () => store.reset()) },
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
     { token: Views, source: { view: { views: views.views, saved: views.saved }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } },
-    {
-      token: Palette,
-      source: { view: { results: palette.results }, commands: { setCatalog: e => palette.setCatalog(e), search: q => palette.search(q) } }
-    }
+    { token: Palette, source: paletteSource(palette) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
@@ -167,6 +166,40 @@ describe('the command palette', () => {
     await press('Escape');
     expect(h.ui.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
     expect(h.store.version.value).toBe(before);
+  });
+
+  it('offers the issues seen lately before anything is typed, and searches as before once something is', async () => {
+    await mount(['WEB-7', 'API-2', 'WEB-900']);
+    await press('k', { ctrl: true });
+    const items = h.palette.results.value.items;
+    expect(items.slice(0, 2).map(item => [item.group, item.id])).toEqual([
+      ['Recent', 'WEB-7'],
+      ['Recent', 'API-2']
+    ]);
+    // Listed under their own heading, above the commands.
+    expect(h.ui.getByText('Recent')).toBeDefined();
+    expect(items[2]!.kind).toBe('command');
+
+    await type('api-2');
+    expect(h.palette.results.value.items.some(item => item.group === 'Recent')).toBe(false);
+    expect(h.palette.results.value.items[0]).toMatchObject({ kind: 'issue', group: 'Issues' });
+    expect(h.palette.results.value.items.some(item => item.id === 'API-2')).toBe(true);
+
+    // Emptied again, it's the recent ones again; Enter opens the first.
+    for (let i = 0; i < 'api-2'.length; i++) await press('Backspace');
+    expect(results()[0]).toMatch(/^WEB-7 /);
+    await press('Enter');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await settle();
+    expect(h.ui.runtime.services.get(RouterService).url.value).toBe('/issue/WEB-7');
+  });
+
+  it("leaves out the issue that's open", async () => {
+    await mount(['WEB-7', 'API-2']);
+    h.ui.runtime.services.get(RouterService).navigate('/issue/WEB-7');
+    await settle();
+    await press('k', { ctrl: true });
+    expect(h.palette.results.value.items.filter(item => item.group === 'Recent').map(item => item.id)).toEqual(['API-2']);
   });
 
   it("copies the link of the issue under the list's cursor, and says so", async () => {

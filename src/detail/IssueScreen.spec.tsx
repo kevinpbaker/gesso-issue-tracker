@@ -12,6 +12,9 @@ import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
 import type { Issue } from '../model/types';
+import { Recent } from '../recent/RecentContract';
+import { RecentStore } from '../recent/RecentStore';
+import { recentSource } from '../recent/recentSource';
 import { IssueDetailChannel } from './IssueDetailContract';
 import { IssueDetailService } from './IssueDetailService';
 import { IssueScreen } from './IssueScreen';
@@ -22,7 +25,7 @@ import { detailSource } from './detailSource';
  * with the keys a person would press, a sub-issue and a link are found
  * by searching, the description and a comment are written in the
  * editor, and then the page is reloaded from what was saved. And the
- * issue's link and key copy.
+ * issue's link and key copy, and opening it counts as a recent view.
  */
 
 function Page(_inputs: Inputs<{}>, ctx: ComponentContext) {
@@ -39,6 +42,7 @@ interface Mounted {
   ui: Rendered;
   served: ServedForTest;
   store: IssueStore;
+  recent: RecentStore;
   /** What was put on the clipboard. */
   copied: string[];
 }
@@ -56,9 +60,11 @@ afterEach(() => {
 const fresh = (): IssueStore => new IssueStore(seedWorkspace({ issues: 300 }), 1);
 
 async function mount(store: IssueStore, key: string): Promise<void> {
+  const recent = new RecentStore({ read: async () => ({ outcome: 'ok', value: null }), write: async () => 'ok', remove: async () => 'ok' });
   const served = serveForTest([
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
-    { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) }
+    { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) },
+    { token: Recent, source: recentSource(recent) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
@@ -74,7 +80,7 @@ async function mount(store: IssueStore, key: string): Promise<void> {
   const router = ui.runtime.services.get(RouterService);
   router.setRoutes({ routes: [route({ path: '/issue/:key', component: Page })] });
   router.navigate(`/issue/${key}`);
-  h = { ui, served, store, copied };
+  h = { ui, served, store, recent, copied };
   await settle();
 }
 
@@ -267,8 +273,20 @@ describe('the issue page', () => {
     expect(h.ui.runtime.services.get(CommandsService).notice.value?.text).toBe("Couldn't copy the link");
   });
 
+  it('counts each issue opened as a recent view, newest first', async () => {
+    await mount(fresh(), 'WEB-12');
+    expect(h.recent.keys.value).toEqual(['WEB-12']);
+    h.ui.runtime.services.get(RouterService).navigate('/issue/WEB-13');
+    await settle();
+    // Typed in lower case, it's still the one issue.
+    h.ui.runtime.services.get(RouterService).navigate('/issue/web-12');
+    await settle();
+    expect(h.recent.keys.value).toEqual(['WEB-12', 'WEB-13']);
+  });
+
   it('says so when no issue has the key', async () => {
     await mount(fresh(), 'NOPE-1');
     expect(h.ui.getByText('No issue has that key.')).toBeDefined();
+    expect(h.recent.keys.value).toEqual([]);
   });
 });

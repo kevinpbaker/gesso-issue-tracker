@@ -7,16 +7,27 @@ import type { CatalogEntry, PaletteItem } from './PaletteContract';
 /** The most commands and issues an answer carries. */
 const COMMANDS = 40;
 const ISSUES = 8;
+/** The most recent issues offered before anything is typed. */
+export const RECENT = 5;
 
 /** Ranks the palette's commands and the workspace's issues against a query. Plain RxJS: it runs in node. */
 export class PaletteService {
   readonly results = new BehaviorSubject<{ readonly asked: string; readonly items: readonly PaletteItem[] }>({ asked: '', items: [] });
   private catalog: readonly CatalogEntry[] = [];
+  private openIssue: string | null = null;
 
-  constructor(private readonly store: IssueStore) {}
+  /** `recent` is the keys of the issues opened lately, newest first. */
+  constructor(
+    private readonly store: IssueStore,
+    private readonly recent: () => readonly string[] = () => []
+  ) {}
 
   setCatalog(entries: readonly CatalogEntry[]): void {
     this.catalog = entries;
+  }
+
+  setOpenIssue(key: string | null): void {
+    this.openIssue = key;
   }
 
   search(query: string): void {
@@ -32,7 +43,7 @@ export class PaletteService {
       .slice(0, COMMANDS)
       .map(({ entry }): PaletteItem => ({ kind: 'command', id: entry.id, label: entry.label, group: entry.group }));
     if (query.trim() === '') {
-      return commands;
+      return [...this.recentIssues(), ...commands];
     }
     // Issues, by key or title: a scan of every issue, a few milliseconds
     // at 50,000, in this worker and off the frame.
@@ -49,5 +60,19 @@ export class PaletteService {
     const issues = best.map((found): PaletteItem => ({ kind: 'issue', id: found.key, label: `${found.key} ${found.title}`, group: 'Issues' }));
     // A key typed is an issue asked for: issues first.
     return /^[a-z]+-\d*$/i.test(query.trim()) ? [...issues, ...commands] : [...commands, ...issues];
+  }
+
+  /** The issues opened lately that still exist, besides the one open now. */
+  private recentIssues(): PaletteItem[] {
+    // By the store's key, so `/issue/web-3` typed into the address bar is WEB-3.
+    const open = this.openIssue === null ? undefined : this.store.byKey(this.openIssue)?.key;
+    const items: PaletteItem[] = [];
+    for (const key of this.recent()) {
+      const issue = this.store.byKey(key);
+      if (issue === undefined || issue.key === open) continue;
+      items.push({ kind: 'issue', id: issue.key, label: `${issue.key} ${issue.title}`, group: 'Recent' });
+      if (items.length === RECENT) break;
+    }
+    return items;
   }
 }

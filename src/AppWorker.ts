@@ -30,6 +30,10 @@ import { Views } from './views/ViewsContract';
 import { ViewsStore } from './views/ViewsStore';
 import { Palette } from './palette/PaletteContract';
 import { PaletteService } from './palette/PaletteService';
+import { paletteSource } from './palette/paletteSource';
+import { Recent } from './recent/RecentContract';
+import { RecentStore } from './recent/RecentStore';
+import { recentSource } from './recent/recentSource';
 import { Compose } from './compose/ComposeContract';
 import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
@@ -52,7 +56,8 @@ const search = new SearchIndex(store);
 const detail = new IssueDetailService(store, ME);
 const compose = new ComposeService(store, disk, ME);
 const views = new ViewsStore(disk);
-const palette = new PaletteService(store);
+const recent = new RecentStore(disk);
+const palette = new PaletteService(store, () => recent.keys.value);
 
 const reset = (): void => {
   store.reset();
@@ -87,19 +92,18 @@ serveChannels([
       }
     }
   },
-  {
-    token: Palette,
-    source: {
-      view: { results: palette.results },
-      commands: { setCatalog: entries => palette.setCatalog(entries), search: query => palette.search(query) }
-    }
-  }
+  { token: Palette, source: paletteSource(palette) },
+  { token: Recent, source: recentSource(recent) }
 ]);
 
 void compose.restore();
 void views.restore();
 
 void preferences.restore();
+const recentRestored = recent.restore();
+/** Recent issues that are gone (filed here and then reset away, say) are forgotten. */
+const pruneRecent = (): void => recent.prune(key => store.byKey(key) !== undefined);
+store.reloaded.subscribe(pruneRecent);
 
 void persistence.restore(store).then(outcome => {
   if (outcome === 'rejected') {
@@ -108,6 +112,9 @@ void persistence.restore(store).then(outcome => {
     void persistence.clear();
   }
   persistence.watch(store);
+  // Only once the saved changes are in: an issue filed in an earlier
+  // session doesn't exist until then.
+  void recentRestored.then(pruneRecent);
   // Built after the saved changes are in, so it indexes what's there.
   search.warm();
 });

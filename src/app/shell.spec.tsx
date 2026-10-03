@@ -21,6 +21,10 @@ import { seedWorkspace } from '../model/seed';
 import { CommandsService } from '../palette/CommandsService';
 import { Palette } from '../palette/PaletteContract';
 import { PaletteService } from '../palette/PaletteService';
+import { paletteSource } from '../palette/paletteSource';
+import { Recent } from '../recent/RecentContract';
+import { RecentStore } from '../recent/RecentStore';
+import { recentSource } from '../recent/recentSource';
 import { Views } from '../views/ViewsContract';
 import { ViewsStore } from '../views/ViewsStore';
 import { Preferences } from './PreferencesContract';
@@ -56,7 +60,8 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   void preferences.restore();
   const compose = new ComposeService(store, disk, 'u0');
   const views = new ViewsStore(disk);
-  const palette = new PaletteService(store);
+  const recent = new RecentStore(disk);
+  const palette = new PaletteService(store, () => recent.keys.value);
   served = serveForTest([
     { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
     { token: Preferences, source: preferencesSource(preferences) },
@@ -68,7 +73,8 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
       source: { view: { draft: compose.draft, filed: compose.filed }, commands: { save: d => compose.save(d), file: d => compose.file(d), discard: () => compose.discard() } }
     },
     { token: Views, source: { view: { views: views.views, saved: views.saved }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } },
-    { token: Palette, source: { view: { results: palette.results }, commands: { setCatalog: e => palette.setCatalog(e), search: q => palette.search(q) } } }
+    { token: Palette, source: paletteSource(palette) },
+    { token: Recent, source: recentSource(recent) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
