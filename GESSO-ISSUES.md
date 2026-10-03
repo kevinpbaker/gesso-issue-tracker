@@ -690,6 +690,18 @@ environment seeded.
 now handed its node after all its props are written and its environment
 is seeded, before modifiers attach (`6d51def`).
 
+### 56. A button couldn't be left out of the Tab order
+
+**What:** the issue page's Previous and Next buttons sit above the
+title, and the keyboard steps with j and k. As two ordinary tab stops
+they stood between the issue (where focus starts) and its title.
+`Button` had no way to stay pressable and focusable while Tab went past
+it; the list's row checkboxes are bare `<button focusable={false}>`
+elements for the same reason, without `Button`'s look.
+
+**Fix:** `Button` takes `tabStop` (default true), passed to the element
+(`d1fec43`). The step buttons set it false.
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker

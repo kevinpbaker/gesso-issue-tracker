@@ -151,6 +151,13 @@ CI to run in, and the Vercel project.
   After every change, from anywhere, a toast says what it did and
   offers Undo; after an undo it says what was undone and offers Redo
   (`src/app/UndoToast.tsx`). Typing in a description raises none.
+  A command's note ("Copied WEB-12's link") goes through the same
+  toast, so the two never overlap. On an issue's page, j and k step
+  through the list or board it was opened from (its team's list when
+  there's none), "3 of 1,240" says where it is, and Escape goes back
+  to that list with the cursor on the issue shown last, scrolled where
+  it was; a list keeps its cursor, scroll and arrangement across the
+  trip (`src/issues/ListPlaces.ts`, `src/detail/StepService.ts`).
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -158,7 +165,7 @@ CI to run in, and the Vercel project.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,575 tests in 33 files.
+`pnpm test` runs 1,594 tests in 34 files.
 
 ---
 
