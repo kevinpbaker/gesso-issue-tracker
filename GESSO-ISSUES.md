@@ -4,10 +4,13 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `f3a9544`. Not yet pushed or released. Every
+per fix, `2c572e3` through `4450c5c`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
-behavior changed. Gesso's full `pnpm check` passes with them: format,
-lint, types, 4,487 tests, build, API reports and the docs build.
+behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
+format, lint, types, 4,487 tests, build, API reports and the docs
+build. The last three (16 to 18) were checked with their packages'
+types, tests and API reports, because another session's unfinished work
+in the same checkout fails the full check for now.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -260,6 +263,40 @@ it constructs them as, unless the application chose a format
 (`f3a9544`). The render worker went from 291 kB to 218 kB gzipped, and
 the converter is a separate chunk. Checked in a production build: an
 HTML paste loads it and lands.
+
+### 16. A focused field lost its editing keys to app shortcuts
+
+**What:** an app shortcut on a key a text field also uses (Mod+Z for
+document undo, say) took the key even while a field was focused, so
+the field's own undo, select all, and word and line moves could be
+shadowed by whatever the app happened to bind.
+
+**Fix:** the shortcut registry leaves a focused field the keys its
+editing commands use (`84fe6d5`). Enter and plain typing still go to
+shortcuts that ask for them.
+
+### 17. An IME commit that matched the composition was dropped
+
+**What:** composing over a selection across blocks (Japanese, say)
+showed the composed text, but the commit compared it with the text as
+the composition last showed it, found no change and reported nothing,
+so the editor never heard the edit and the text was lost.
+
+**Fix:** a commit is compared with the text from before the composition
+began (`be3e274`), so it's reported whatever the composition showed on
+the way.
+
+### 18. A prop a re-render stopped declaring stayed on
+
+**What:** a node rendered with `maxWidth` once and without it next time
+kept the old `maxWidth`. Reconciliation set the props that were declared
+and never took off the ones that weren't. In the editor, switching to
+view source and back left the document 17 px narrower.
+
+**Fix:** reconciliation remembers what each element declared and
+removes what it stops declaring, through the same override cascade as
+setting it (`4450c5c`), so a style or theme underneath shows through
+again.
 
 ## Not a bug, now documented
 

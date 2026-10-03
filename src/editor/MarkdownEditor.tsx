@@ -13,14 +13,28 @@ import {
   type UiNode,
   type UiTextPosition
 } from 'gesso-core';
-import { EditingService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
+import { Button, useOverlay } from 'gesso-components';
+import { EditingService, FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { chunk } from './chunks';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
 import { inlineRuns } from './inline';
 import { makeLink, toggleMark, type Mark } from './formatting';
-import { block, continuation, detached, inputRule, isList, parse, serialize, type Block } from './markdown';
+import {
+  block,
+  caretToSource,
+  continuation,
+  detached,
+  inputRule,
+  isList,
+  parse,
+  serialize,
+  serializeWithRanges,
+  sourceToCaret,
+  type Block
+} from './markdown';
 import { pastedBlocks, pastedMarkdown } from './paste';
+import { applySlash, filterSlash, slashQuery, type SlashItem } from './slash';
 
 /**
  * A rich text editor for markdown, drawn by Gesso.
@@ -137,6 +151,21 @@ interface BlockHandlers {
   redo(): void;
   /** The caret moved by itself: the next character starts a new undo step. */
   moved(): void;
+  /** A block took focus. */
+  focused(id: string): void;
+  /** A key while the slash menu is open over this block: true when the menu took it. */
+  slashKey(id: string, key: string): boolean;
+  /** Turns the slash menu's block into the chosen kind. */
+  slashPick(value: string): void;
+  /** Switches between the formatted document and its markdown. */
+  toggleSource(): void;
+}
+
+/** The slash menu, while it is open: which block, what's typed after the slash, which item is lit. */
+interface SlashState {
+  readonly id: string;
+  readonly query: string;
+  readonly index: number;
 }
 
 /** What a block needs from the document around it, as cells. */
@@ -153,6 +182,14 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
   const history = new DocumentHistory();
   const requests = new FocusRequests();
   const fields: Fields = { block: new WeakMap(), node: new Map() };
+  const slash = internalState<SlashState | null>(null);
+  /** Whether the document is shown formatted or as its markdown. */
+  const mode = internalState<'rich' | 'source'>('rich');
+  /** The markdown the source view opened with. */
+  const sourceText = internalState('');
+  const sourceRequests = new FocusRequests();
+  const focusService = ctx.inject(FocusService);
+  const menu = useOverlay(ctx, 'slash-menu');
   const editing = ctx.inject(EditingService);
 
   // Everything the views read, worked out from one document state at a
@@ -323,6 +360,15 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       // back the `# `.
       history.record(before, { blocks: typed, caret: { id, offset: caret } }, grew ? 'typing' : 'deleting');
       blocks.value = typed;
+      // `/` at the start of an empty paragraph opens the slash menu, and
+      // what follows it filters the menu.
+      const query = edited.type === 'paragraph' ? slashQuery(text) : null;
+      if (query !== null) {
+        const open = slash.value;
+        slash.value = { id, query, index: open !== null && open.id === id && open.query === query ? open.index : 0 };
+      } else if (slash.value?.id === id) {
+        slash.value = null;
+      }
       const converted = inputRule(edited);
       if (converted === null) {
         return;
@@ -457,6 +503,81 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       void pasteAt({ id, offset: start }, { id, offset: end }, text, html);
       return true;
     },
+    focused(id) {
+      if (slash.value !== null && slash.value.id !== id) {
+        slash.value = null;
+      }
+    },
+    slashKey(id, key) {
+      const open = slash.value;
+      if (open === null || open.id !== id) {
+        return false;
+      }
+      const items = filterSlash(open.query);
+      switch (key) {
+        case 'ArrowDown':
+        case 'ArrowUp': {
+          const step = key === 'ArrowDown' ? 1 : -1;
+          slash.value = { ...open, index: items.length === 0 ? 0 : (open.index + step + items.length) % items.length };
+          return true;
+        }
+        case 'Enter':
+        case 'Tab': {
+          const item = items[open.index];
+          if (item === undefined) {
+            return false;
+          }
+          handlers.slashPick(item.value);
+          return true;
+        }
+        case 'Escape':
+          slash.value = null;
+          return true;
+        default:
+          return false;
+      }
+    },
+    slashPick(value) {
+      const open = slash.value;
+      slash.value = null;
+      const index = open === null ? -1 : indexOf(open.id);
+      const current = blocks.value[index];
+      if (current === undefined) {
+        return;
+      }
+      // One step after the typing, so undo gives back the `/query` typed.
+      const made = applySlash(current, value);
+      const target = made.find(b => b.type !== 'rule') ?? made[0]!;
+      commit(replaced(index, made), { id: target.id, offset: 0 }, 'shortcut', here(current.id, current.text.length));
+    },
+    toggleSource() {
+      if (mode.value === 'rich') {
+        // The caret goes to the same character in the markdown.
+        const written = serializeWithRanges(blocks.value);
+        const node = focusService.focused.value;
+        const id = node === null ? undefined : fields.block.get(node);
+        const at = node === null || id === undefined ? 0 : caretToSource(blocks.value, written, { id, offset: editorFor(node).focus });
+        slash.value = null;
+        sourceText.value = written.text;
+        mode.value = 'source';
+        sourceRequests.send(SOURCE, at);
+        return;
+      }
+      const field = fields.node.get(SOURCE);
+      const text = field === undefined ? sourceText.value : editorFor(field).text;
+      const at = field === undefined ? 0 : editorFor(field).focus;
+      // Unchanged markdown keeps the blocks it came from; edited markdown
+      // is read again, as one step that undo takes back.
+      const changed = text !== serialize(blocks.value);
+      const next = changed ? parse(text) : blocks.value;
+      const caret = sourceToCaret(next, serializeWithRanges(next), at);
+      mode.value = 'rich';
+      if (changed) {
+        commit(next, caret, 'structure', { blocks: blocks.value, caret: null });
+      } else if (caret !== null) {
+        focus(caret.id, caret.offset);
+      }
+    },
     undo: () => restore(history.undo()),
     redo: () => restore(history.redo()),
     moved: () => history.breakRun()
@@ -537,13 +658,36 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     }
   };
 
+  // The slash menu floats under its block, outside the document, with no
+  // backdrop: focus stays in the block, so typing goes on filtering it.
+  ctx.effect(
+    slash.pipe(
+      map(open => open?.id ?? null),
+      distinctUntilChanged()
+    ),
+    id => {
+      const anchor = id === null ? undefined : fields.node.get(id);
+      if (anchor === undefined) {
+        menu.hide();
+        return;
+      }
+      menu.show(<SlashMenu state={slash} onPick={value => handlers.slashPick(value)} />, {
+        anchor,
+        placement: 'bottom-start',
+        offset: 4,
+        environment: anchor
+      });
+    }
+  );
+
   const context: Context = { cellFor, numberOf, requests, handlers, fields };
 
   const editor = (
     <scrollview
       flexGrow={1}
       flexBasis={0}
-      height={percent(100)}
+      minHeight={0}
+      width={percent(100)}
       borderRadius={10}
       borderWidth={1}
       borderColor="border"
@@ -561,16 +705,55 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     </scrollview>
   );
 
+  const source = (
+    <scrollview flexGrow={1} flexBasis={0} minHeight={0} width={percent(100)} borderRadius={10} borderWidth={1} borderColor="border" padding={20}>
+      <editabletext
+        width={percent(100)}
+        multiline={true}
+        textWrap="word"
+        value={sourceText}
+        fontFamily={MONO}
+        fontSize={13}
+        color="text"
+        label="Markdown"
+        onInput={event => inputs.onChange.value?.(event.value)}
+        onKeyDown={event => {
+          if ((event.modifiers.meta || event.modifiers.ctrl) && event.modifiers.shift && event.key.toLowerCase() === 'm') {
+            handlers.toggleSource();
+            event.preventDefault();
+          }
+        }}
+        modifiers={[focusRequests({ id: SOURCE, requests: sourceRequests, fields })]}
+      />
+    </scrollview>
+  );
+
+  // The same document, formatted or as markdown, with a switch between.
+  const body = (
+    <column flexGrow={1} flexBasis={0} height={percent(100)} gap={8}>
+      <row width={percent(100)} x="end">
+        <Button
+          size="small"
+          variant="plain"
+          label={mode.pipe(map(m => (m === 'rich' ? 'View markdown source' : 'View formatted')))}
+          onClick={() => handlers.toggleSource()}>
+          <text text={mode.pipe(map(m => (m === 'rich' ? 'Markdown' : 'Formatted')))} fontSize={12} color="textMuted" />
+        </Button>
+      </row>
+      {mode.pipe(map(m => (m === 'rich' ? editor : source)))}
+    </column>
+  );
+
   if (inputs.showSource.value !== true) {
     return (
       <row width={percent(100)} height={percent(100)}>
-        {editor}
+        {body}
       </row>
     );
   }
   return (
     <row gap={16} padding={16} width={percent(100)} height={percent(100)} backgroundColor="background">
-      {editor}
+      {body}
       <column flexGrow={1} flexBasis={0} height={percent(100)} gap={8}>
         <text text="Stored markdown" fontSize={12} fontWeight={600} color="textMuted" />
         <scrollview flexGrow={1} width={percent(100)} borderRadius={10} backgroundColor="surface" padding={16}>
@@ -613,7 +796,54 @@ function ChunkView(inputs: Inputs<{ members: readonly Block[]; context: Context 
   );
 }
 
+/** The slash menu's list: the items the query matches, the lit one marked. */
+function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: string) => void }>, _ctx: ComponentContext) {
+  const items = inputs.state.pipe(map(open => (open === null ? [] : filterSlash(open.query))));
+  const lit = inputs.state.pipe(map(open => open?.index ?? 0));
+  const row = (item: SlashItem, index: number) => (
+    <button
+      key={item.value}
+      role="option"
+      label={item.label}
+      states={lit.pipe(map(at => (at === index ? ['selected' as const] : [])))}
+      onClick={() => inputs.onPick.value(item.value)}
+      backgroundColor={lit.pipe(map(at => (at === index ? 'controlBackgroundHovered' : 'surface')))}
+      borderRadius={6}
+      paddingLeft={10}
+      paddingRight={10}
+      height={30}
+      width={percent(100)}
+      y="center"
+      cursor="pointer">
+      <row width={percent(100)} x="space-between" y="center" gap={16}>
+        <text text={item.label} fontSize={13} color="text" />
+        <text text={item.hint} fontSize={12} color="textMuted" fontFamily={MONO} />
+      </row>
+    </button>
+  );
+  return (
+    <column
+      role="listbox"
+      label="Turn into"
+      width={240}
+      padding={4}
+      gap={2}
+      backgroundColor="surface"
+      borderWidth={1}
+      borderColor="border"
+      borderRadius={8}>
+      {items.pipe(
+        map(list =>
+          list.length === 0 ? [<text key="none" text="No matches" fontSize={13} color="textMuted" padding={8} />] : list.map(row)
+        )
+      )}
+    </column>
+  );
+}
+
 const HEADING_SIZES = [26, 21, 18, 16, 15, 14];
+/** The source view's field, among the blocks' fields. */
+const SOURCE = 'source';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 function BlockView(inputs: Inputs<{ block: Block; number: number; context: Context }>, _ctx: ComponentContext) {
@@ -639,7 +869,12 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     const { shift, meta, ctrl } = event.modifiers;
     const command = meta || ctrl;
     const formatting = command ? shortcutMark(event.key, shift) : null;
-    if (formatting !== null) {
+    if (command && shift && event.key.toLowerCase() === 'm') {
+      handlers.toggleSource();
+      event.preventDefault();
+    } else if (!command && handlers.slashKey(id, event.key)) {
+      event.preventDefault();
+    } else if (formatting !== null) {
       handlers.format(id, formatting, model.start, model.end);
       event.preventDefault();
     } else if (command && (event.key === 'z' || event.key === 'Z')) {
@@ -702,6 +937,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       label={label(current.value)}
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}
+      onFocus={() => handlers.focused(id)}
       onInput={event => handlers.input(id, event.value, event.selectionEnd)}
       modifiers={[focusRequests({ id, requests, fields })]}
     />

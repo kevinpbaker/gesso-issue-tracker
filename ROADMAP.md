@@ -51,8 +51,12 @@ out precisely where and why.
   all, typing or deleting over it, and copying it as markdown. Mod+B, I, E
   (code), K (link) and Shift+X (strikethrough) format the selection,
   in one block or across several. Pasted markdown becomes blocks, and
-  pasted HTML is converted to markdown first. Left: the slash menu,
-  view source, mentions as chips, and IME testing.
+  pasted HTML is converted to markdown first (by a converter loaded on
+  the first HTML paste). Typing `/` in an empty paragraph opens a menu
+  of block kinds, filtered as you type. Mod+Shift+M switches to the
+  markdown source and back, keeping the caret where it was. Mentions
+  and issue keys render as chips. Composition (IME) is tested in one
+  block and over a selection across blocks.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -60,14 +64,7 @@ out precisely where and why.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-- **Phase 5 needs:**
-  - chunked block rendering, so a keystroke reflows one chunk and not a
-    2,868-child column;
-  - a document-level undo through `onBeforeInput`, which Gesso already
-    supports;
-  - cross-block selection, the one Gesso feature still missing.
-
-`pnpm test` is 101 specs. Phase 5 is next.
+`pnpm test` runs 1,466 tests in 20 files.
 
 ---
 

@@ -348,6 +348,119 @@ describe('pasting', () => {
   });
 });
 
+describe('the slash menu', () => {
+  const menu = () => ui.queryByRole('listbox', { name: 'Turn into' });
+
+  it('opens on a slash in an empty paragraph, filters, and turns the block into the pick', async () => {
+    await mount('start');
+    await caretIn('Paragraph', 0, 'end');
+    await press('Enter');
+    await type('/');
+    expect(menu()).not.toBeNull();
+    await type('head');
+    expect(ui.getAllByRole('option').map(option => ui.getSemantics(option).label)).toEqual(['Heading 1', 'Heading 2', 'Heading 3']);
+    await press('ArrowDown');
+    await press('Enter');
+    expect(menu()).toBeNull();
+    await type('Title');
+    expect(source()).toBe('start\n\n## Title');
+  });
+
+  it('gives back what was typed on undo, and closes on Escape', async () => {
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    await type('/quo');
+    await press('Enter');
+    expect(source()).toBe('>');
+    await press('z', { meta: true });
+    expect(source()).toBe('/quo');
+    await caretIn('Paragraph', 0, 'end');
+    await type('t');
+    expect(menu()).not.toBeNull();
+    await press('Escape');
+    expect(menu()).toBeNull();
+    expect(source()).toBe('/quot');
+  });
+
+  it('stays shut for a slash anywhere else', async () => {
+    await mount('a path');
+    await caretIn('Paragraph', 0, 'end');
+    await type('/to');
+    expect(menu()).toBeNull();
+  });
+});
+
+describe('view source', () => {
+  const markdownField = () => ui.getByLabel('Markdown');
+
+  it('shows the markdown with the caret on the same character, and comes back to it', async () => {
+    await mount('# Title\n\nbody text');
+    await caretIn('Paragraph', 0, 4);
+    await press('m', { meta: true, shift: true });
+    const field = markdownField();
+    expect(editorFor(field).text).toBe('# Title\n\nbody text');
+    expect(editorFor(field).focus).toBe('# Title\n\nbody'.length);
+    await press('m', { meta: true, shift: true });
+    await type('!');
+    expect(source()).toBe('# Title\n\nbody! text');
+  });
+
+  it('reads edited markdown back as blocks, in one step undo takes back', async () => {
+    await mount('one');
+    await caretIn('Paragraph', 0, 'end');
+    await press('m', { meta: true, shift: true });
+    editorFor(markdownField()).select(3, 3);
+    await type('\n\n- two');
+    await press('m', { meta: true, shift: true });
+    expect(source()).toBe('one\n\n- two');
+    expect(ui.getAllByRole('textbox', { name: 'List item' })).toHaveLength(1);
+    await type('!');
+    expect(source()).toBe('one\n\n- two!');
+    await press('z', { meta: true });
+    await press('z', { meta: true });
+    expect(source()).toBe('one');
+  });
+});
+
+describe('input from an IME', () => {
+  const editing = () => ui.runtime.input.editing;
+
+  it('composes into a block, and undoes as typing', async () => {
+    await mount('ab');
+    await caretIn('Paragraph', 0, 1);
+    editing().compositionStart();
+    editing().compositionUpdate('ni', 2);
+    editing().compositionUpdate('你', 1);
+    editing().compositionEnd('你好');
+    await ui.settle();
+    expect(source()).toBe('a你好b');
+    await press('z', { meta: true });
+    expect(source()).toBe('ab');
+  });
+
+  it('composes over a selection across blocks by joining them first', async () => {
+    await mount('one two\n\nthree four');
+    await caretIn('Paragraph', 0, 3);
+    await press('ArrowDown', { shift: true });
+    editing().compositionStart();
+    await ui.settle();
+    editing().compositionUpdate('か', 1);
+    editing().compositionEnd('か');
+    await ui.settle();
+    expect(source()).toBe('oneかee four');
+  });
+
+  it('turns a heading shortcut typed through an IME into a heading', async () => {
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    editing().compositionStart();
+    editing().compositionEnd('#');
+    await type(' ');
+    await type('見出し');
+    expect(source()).toBe('# 見出し');
+  });
+});
+
 describe('a 5,000-line document', () => {
   it('re-measures a handful of nodes per keystroke, and a chunk for an Enter', async () => {
     ui = renderTest(createComponent(MarkdownEditor, { value: bigDocument() }), { width: 900, height: 700 });

@@ -341,7 +341,25 @@ function listItem(
 // ---------------------------------------------------------------------------
 
 export function serialize(blocks: readonly Block[]): string {
-  const out: string[] = [];
+  return serializeWithRanges(blocks).text;
+}
+
+/** Where each block's own text went in the markdown, as [start, end), by block id. */
+export type BlockRanges = Map<string, readonly [number, number]>;
+
+/** The markdown, and where in it each block was written: for mapping a caret into it. */
+export function serializeWithRanges(blocks: readonly Block[]): { text: string; ranges: BlockRanges } {
+  const ranges: BlockRanges = new Map();
+  let length = 0;
+  const out = {
+    parts: [] as string[],
+    push(...parts: string[]) {
+      for (const part of parts) {
+        this.parts.push(part);
+        length += part.length;
+      }
+    }
+  };
   /** The running number of each ordered list, by depth. */
   const counters: (number | undefined)[] = [];
   /** The column each depth's content starts at, so a nested item lines up under its parent's text. */
@@ -411,15 +429,69 @@ export function serialize(blocks: readonly Block[]): string {
         text = shift(text, marker - (current.column ?? marker));
         columns[at] = marker + (MARKER.exec(text)?.[0].length ?? 2);
       }
+      ranges.set(current.id, [length, length + text.length]);
       out.push(text);
       return;
     }
-    out.push(write(current, counters, columns));
+    const written = write(current, counters, columns);
+    ranges.set(current.id, [length, length + written.length]);
+    out.push(written);
   });
 
   const last = blocks.find(b => b.src?.trailing !== undefined);
   out.push(last?.src?.trailing ?? '');
-  return out.join('');
+  return { text: out.parts.join(''), ranges };
+}
+
+/** Where a block's text starts in what was written for it: past its hashes, marker or box. */
+function textStartIn(written: string, current: Block): number {
+  const first = current.text.split('\n', 1)[0]!;
+  if (first === '') {
+    return current.type === 'code' ? written.indexOf('\n') + 1 : written.length;
+  }
+  const at = written.indexOf(first);
+  return at < 0 ? 0 : at;
+}
+
+/**
+ * A caret in a block, as an offset in the document's markdown. Exact on
+ * a block's first line; on later lines of an indented list item it can
+ * be off by the indentation, and is kept inside the block.
+ */
+export function caretToSource(
+  blocks: readonly Block[],
+  markdown: { text: string; ranges: BlockRanges },
+  caret: { id: string; offset: number }
+): number {
+  const range = markdown.ranges.get(caret.id);
+  const current = blocks.find(b => b.id === caret.id);
+  if (range === undefined || current === undefined) {
+    return 0;
+  }
+  const written = markdown.text.slice(range[0], range[1]);
+  return Math.min(range[1], range[0] + textStartIn(written, current) + caret.offset);
+}
+
+/** An offset in the markdown, as a caret in the block written there, or in the nearest one before it. */
+export function sourceToCaret(
+  blocks: readonly Block[],
+  markdown: { text: string; ranges: BlockRanges },
+  at: number
+): { id: string; offset: number } | null {
+  let found: Block | undefined;
+  for (const current of blocks) {
+    const range = markdown.ranges.get(current.id);
+    if (range !== undefined && range[0] <= at) {
+      found = current;
+    }
+  }
+  if (found === undefined) {
+    return blocks[0] === undefined ? null : { id: blocks[0].id, offset: 0 };
+  }
+  const range = markdown.ranges.get(found.id)!;
+  const written = markdown.text.slice(range[0], range[1]);
+  const offset = at - range[0] - textStartIn(written, found);
+  return { id: found.id, offset: Math.max(0, Math.min(found.text.length, offset)) };
 }
 
 /** Moves every line after the first right by `by` columns, or left when it's negative. */

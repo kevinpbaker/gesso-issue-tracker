@@ -31,6 +31,7 @@ interface Token {
 
 const MARK: Style = { color: 'textMuted' };
 const CODE_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+const CHIP: Style = { color: 'primary', backgroundColor: 'controlBackground' };
 
 const TOKENS: readonly Token[] = [
   { pattern: /(`)([^`]+)(`)/y, styles: [MARK, { fontFamily: CODE_FAMILY, backgroundColor: 'surface' }, MARK] },
@@ -38,8 +39,10 @@ const TOKENS: readonly Token[] = [
   { pattern: /(~~)(?=\S)(.+?)(?<=\S)(~~)/y, styles: [MARK, { textDecoration: 'line-through' }, MARK] },
   { pattern: /(\*|_)(?=\S)(.+?)(?<=\S)(\1)/y, styles: [MARK, { fontStyle: 'italic' }, MARK] },
   { pattern: /(\[)([^\]]+)(\]\()([^)\s]+)(\))/y, styles: [MARK, { color: 'primary', textDecoration: 'underline' }, MARK, MARK, MARK] },
-  { pattern: /(@)([a-z][a-z0-9_-]*)/y, styles: [{ color: 'primary' }, { color: 'primary', fontWeight: 600 }] },
-  { pattern: /()([A-Z]{2,5}-\d+)\b/y, styles: [{}, { color: 'primary', fontWeight: 600 }] }
+  // Mentions and issue references are chips: the whole token on one
+  // background, and still plain text in the markdown.
+  { pattern: /(@)([a-z][a-z0-9_-]*)/y, styles: [CHIP, { ...CHIP, fontWeight: 600 }] },
+  { pattern: /()([A-Z]{2,5}-\d+)\b/y, styles: [{}, { ...CHIP, fontWeight: 600 }] }
 ];
 
 /** Characters that can open a token; everything else is skipped in one go. */

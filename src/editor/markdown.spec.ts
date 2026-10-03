@@ -157,7 +157,8 @@ describe('inline runs', () => {
     expect(runs.find(run => run.text === 'd')?.fontFamily).toContain('monospace');
     expect(runs.find(run => run.text === 'e')).toMatchObject({ textDecoration: 'line-through' });
     expect(runs.find(run => run.text === 'f')).toMatchObject({ color: 'primary' });
-    expect(runs.find(run => run.text === 'ada')).toMatchObject({ fontWeight: 600 });
+    expect(runs.find(run => run.text === 'ada')).toMatchObject({ fontWeight: 600, backgroundColor: 'controlBackground' });
+    expect(runs.find(run => run.text === '@')).toMatchObject({ backgroundColor: 'controlBackground' });
     expect(runs.find(run => run.text === 'WEB-12')).toMatchObject({ fontWeight: 600 });
   });
 
@@ -177,5 +178,22 @@ describe('inline runs', () => {
       }
       expect(covers(inlineRuns(source), source)).toBe(true);
     }
+  });
+});
+
+describe('carets between blocks and their markdown', () => {
+  it('lands on the same character both ways', async () => {
+    const { caretToSource, serializeWithRanges, sourceToCaret } = await import('./markdown');
+    const blocks = parse('# Title\n\ntext here\n\n- [ ] task one\n  - nested\n\n```ts\ncode()\n```');
+    const markdown = serializeWithRanges(blocks);
+    for (const current of blocks) {
+      for (const offset of [0, 1, current.text.split('\n')[0]!.length]) {
+        const at = caretToSource(blocks, markdown, { id: current.id, offset });
+        expect(sourceToCaret(blocks, markdown, at)).toEqual({ id: current.id, offset: Math.min(offset, current.text.length) });
+      }
+    }
+    const task = blocks.find(b => b.type === 'task')!;
+    const at = caretToSource(blocks, markdown, { id: task.id, offset: 4 });
+    expect(markdown.text.slice(at, at + 3)).toBe(' on');
   });
 });
