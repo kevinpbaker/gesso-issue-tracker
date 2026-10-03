@@ -23,9 +23,9 @@ import { Palette, type PaletteItem } from './PaletteContract';
  * palette closes before a command runs, so the command acts where focus
  * was when the palette opened.
  *
- * It also shows what a command had to say (`CommandsService.say`), such
- * as "Copied WEB-12's link": a small note at the bottom of the window
- * for a moment, read out politely, and taking no focus.
+ * What a command has to say (`CommandsService.say`), such as "Copied
+ * WEB-12's link", the shell's `UndoToast` shows, in the one place the
+ * app's notices go.
  */
 export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const service = ctx.inject(CommandsService);
@@ -35,7 +35,6 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const scroll = ctx.inject(ScrollService);
   const palette = ctx.channel(Palette);
   const overlay = useOverlay(ctx, 'palette');
-  const note = useOverlay(ctx, 'palette-notice');
 
   const query = new BehaviorSubject('');
   const active = new BehaviorSubject(0);
@@ -123,31 +122,6 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
   };
 
   ctx.effect(service.open.pipe(distinctUntilChanged()), open => (open ? show() : close()));
-
-  // What a command said: shown for a moment, and read out from a status
-  // that's always there, since one that arrives already holding its text
-  // isn't reliably read. It's emptied afterwards, so the same words next
-  // time are a change a screen reader hears.
-  const said = new BehaviorSubject('');
-  let noteTimer: ReturnType<typeof setTimeout> | undefined;
-  ctx.onUnmount(() => clearTimeout(noteTimer));
-  ctx.effect(service.notice, notice => {
-    if (notice === null) return;
-    clearTimeout(noteTimer);
-    said.next(notice.text);
-    note.hide();
-    note.show(
-      <row padding={8} paddingLeft={12} paddingRight={12} borderRadius={8} backgroundColor="surface" borderColor="border" borderWidth={1}>
-        <text text={notice.text} fontSize={12} color="text" selectable={false} />
-      </row>,
-      // Clear of the list's selection toolbar (52 px) below it.
-      { bottom: 72, center: 'x', environment: placeholder }
-    );
-    noteTimer = setTimeout(() => {
-      note.hide();
-      said.next('');
-    }, NOTICE_MS);
-  });
 
   const onKeyDown = (event: UiKeyboardEvent): void => {
     const consume = (): void => {
@@ -250,15 +224,8 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     </column>
   );
 
-  return (
-    <box ref={(node: UiNode | null) => (placeholder = node)} width={0} height={0}>
-      <text text={said} label={said} role="status" live="polite" height={0} opacity={0} />
-    </box>
-  );
+  return <box ref={(node: UiNode | null) => (placeholder = node)} width={0} height={0} />;
 }
-
-/** How long a command's note stays up. */
-const NOTICE_MS = 2500;
 
 /** The key of the issue whose page is open, from the url; null on any other screen. */
 function openIssue(url: string): string | null {

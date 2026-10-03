@@ -6,6 +6,7 @@ import { createComponent, route, RouterService, ServiceRegistry, type ComponentC
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { UndoToast } from '../app/UndoToast';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueList } from '../issues/IssueList';
@@ -29,8 +30,8 @@ import { paletteSource } from './paletteSource';
  * catalog, the selection's commands are there while issues are
  * selected, a fuzzy query finds and runs one, and a key opens an issue.
  * Opened with nothing typed, it offers the issues seen lately; and what
- * a command has to say, such as a copy's "Copied", it shows and reads
- * out.
+ * a command has to say, such as a copy's "Copied", the shell's toast
+ * shows and reads out.
  */
 
 function Harness(_inputs: Inputs<{}>, ctx: ComponentContext) {
@@ -46,6 +47,7 @@ function Harness(_inputs: Inputs<{}>, ctx: ComponentContext) {
       ]}>
       <IssueList query={of({ ...DEFAULT_QUERY, group: 'none' as const })} />
       <CommandPalette />
+      <UndoToast />
     </column>
   );
 }

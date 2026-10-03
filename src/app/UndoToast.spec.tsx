@@ -25,9 +25,10 @@ import { workspaceSource } from './workspaceSource';
 /**
  * The undo toast: after every change, wherever it was made, a polite
  * notice of what it did, with Undo; after an undo, what was undone,
- * with Redo. Changes are made the way a person makes them where that's
- * the point (the list's keys, Mod+Z, the toast's button), and straight
- * on the app worker's side where only the notice is.
+ * with Redo; and in the same place, what a command said. Changes are
+ * made the way a person makes them where that's the point (the list's
+ * keys, Mod+Z, the toast's button), and straight on the app worker's
+ * side where only the notice is.
  */
 
 /** The shell's part: Mod+Z and Mod+Shift+Z, the toast, and a list to change things from. */
@@ -185,6 +186,22 @@ describe('the undo toast', () => {
     h.store.reset();
     await settle();
     expect(notice()).toBeNull();
+  });
+
+  it("shows what a command said in the same place, in place of a change's notice", async () => {
+    await mount();
+    await press('i');
+    const label = h.store.undoLabel!;
+    h.ui.runtime.services.get(CommandsService).say("Copied WEB-1's link");
+    await settle();
+    // One notice, so the two can't cover each other on a narrow window.
+    expect(toasts()).toHaveLength(1);
+    expect(notice()).toBe("Copied WEB-1's link");
+    expect(h.ui.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect([toasts()[0]!.bottom, toasts()[0]!.left]).toEqual([72, 72]);
+    // The change is still Mod+Z away, and its undo is the next notice.
+    await press('z', { ctrl: true });
+    expect(notice()).toBe(`Undone: ${label}`);
   });
 
   it('sits above the selection toolbar, in the corner the tour leaves free', async () => {
