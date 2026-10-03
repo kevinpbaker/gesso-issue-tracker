@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { seedWorkspace } from '../model/seed';
-import { covers, inlineRuns } from './inline';
+import { covers, inlineRuns, readingRuns } from './inline';
 import { block, detached, inputRule, parse, serialize, type Block } from './markdown';
 
 const shape = (blocks: readonly Block[]) => blocks.map(({ id: _id, src: _src, column: _column, ...rest }) => rest);
@@ -160,6 +160,15 @@ describe('inline runs', () => {
     expect(runs.find(run => run.text === 'ada')).toMatchObject({ fontWeight: 600, backgroundColor: 'controlBackground' });
     expect(runs.find(run => run.text === '@')).toMatchObject({ backgroundColor: 'controlBackground' });
     expect(runs.find(run => run.text === 'WEB-12')).toMatchObject({ fontWeight: 600 });
+  });
+
+  it('leaves the markers out of text that is only read', () => {
+    const runs = readingRuns('a **b** _c_ `d` ~~e~~ [f](g) @ada WEB-12');
+    expect(runs.map(run => run.text).join('')).toBe('a b c d e f @ada WEB-12');
+    expect(runs.find(run => run.text === 'b')).toMatchObject({ fontWeight: 700 });
+    expect(runs.find(run => run.text === 'f')).toMatchObject({ color: 'primary', textDecoration: 'underline' });
+    // Unclosed markers are text, not markup, so they stay.
+    expect(readingRuns('**open').map(run => run.text).join('')).toBe('**open');
   });
 
   it('does not treat snake_case or unclosed markers as emphasis', () => {

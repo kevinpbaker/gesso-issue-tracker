@@ -72,7 +72,9 @@ export function inlineRuns(source: string): InlineRun[] {
           flush();
           match.slice(1).forEach((group, index) => {
             if (group !== undefined && group !== '') {
-              runs.push({ text: group, ...token.styles[index] });
+              const run = { text: group, ...token.styles[index] };
+              if (token.styles[index] === MARK) markers.add(run);
+              runs.push(run);
             }
           });
           at += match[0].length;
@@ -85,6 +87,18 @@ export function inlineRuns(source: string): InlineRun[] {
   }
   flush();
   return runs;
+}
+
+/** The runs that are markup rather than content, for `readingRuns`. */
+const markers = new WeakSet<InlineRun>();
+
+/**
+ * The runs for text that is only read, never edited: the same styles
+ * with the markers left out, so `**bold**` is drawn as a bold word. A
+ * comment has no caret, so nothing needs the runs to spell its source.
+ */
+export function readingRuns(source: string): InlineRun[] {
+  return inlineRuns(source).filter(run => !markers.has(run));
 }
 
 /** Whether a set of runs still spells the source, which is the invariant Gesso checks. */

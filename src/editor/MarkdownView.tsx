@@ -3,13 +3,13 @@ import { map } from 'rxjs/operators';
 import { percent } from 'gesso-core';
 import type { ComponentContext, Inputs } from 'gesso-framework';
 
-import { inlineRuns } from './inline';
+import { readingRuns } from './inline';
 import { parse, type Block } from './markdown';
 
 /**
  * Markdown, drawn read-only: the same block parser and inline styler
- * the editor uses, so what a description looks like here is what it
- * looks like while it is being edited. Phase 6 swaps this for the
+ * the editor uses, without the markers the editor has to keep, so a
+ * comment reads as formatted text. Phase 6 swaps this for the
  * Phase 5 editor on the issue page.
  */
 
@@ -34,7 +34,7 @@ export function MarkdownView(inputs: Inputs<{ source: string }>, _ctx: Component
 
 function BlockLine(inputs: Inputs<{ block: Block; number: number }>, _ctx: ComponentContext) {
   const block = inputs.block.value;
-  const spans = inlineRuns(block.text);
+  const spans = readingRuns(block.text);
   const text = (size: number, weight = 400) => (
     <text spans={spans} fontSize={size} fontWeight={weight} color="text" flexShrink={1} />
   );
