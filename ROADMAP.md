@@ -52,7 +52,9 @@ out precisely where and why.
   (code), K (link) and Shift+X (strikethrough) format the selection,
   in one block or across several. Pasted markdown becomes blocks, and
   pasted HTML is converted to markdown first (by a converter loaded on
-  the first HTML paste). Typing `/` in an empty paragraph opens a menu
+  the first HTML paste). A copy puts markdown on the clipboard as text
+  and its HTML rendering beside it, so a paste into a document keeps
+  the formatting. Typing `/` in an empty paragraph opens a menu
   of block kinds, filtered as you type. Mod+Shift+M switches to the
   markdown source and back, keeping the caret where it was. Mentions
   and issue keys render as chips. Composition (IME) is tested in one
@@ -64,7 +66,7 @@ out precisely where and why.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,466 tests in 20 files.
+`pnpm test` runs 1,468 tests in 20 files.
 
 ---
 

@@ -17,6 +17,7 @@ import { Button, useOverlay } from 'gesso-components';
 import { EditingService, FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { chunk } from './chunks';
+import { copiedHtml } from './copyHtml';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
 import { inlineRuns } from './inline';
 import { makeLink, toggleMark, type Mark } from './formatting';
@@ -644,19 +645,38 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     // Copied as markdown: the selected part of each block, written as
     // the blocks they are.
     copyText(startPosition, endPosition) {
-      const start = locate(startPosition);
-      const end = locate(endPosition);
-      if (start === null || end === null) {
-        return '';
-      }
-      const picked = blocks.value.slice(start.index, end.index + 1).map((current, i, all) => {
-        const from = i === 0 ? start.offset : 0;
-        const to = i === all.length - 1 ? end.offset : current.text.length;
-        return detached({ ...current, text: current.text.slice(from, to) });
-      });
-      return serialize(picked);
+      const picked = pick(startPosition, endPosition);
+      return picked === null ? '' : serialize(picked);
+    },
+    // And as HTML, for pasting where markdown would show its asterisks.
+    copyHtml(startPosition, endPosition) {
+      const picked = pick(startPosition, endPosition);
+      return picked === null ? null : copiedHtml(picked);
     }
   };
+
+  /**
+   * The blocks a selection covers, cut to it. Part of one block's text
+   * is copied as text, not as the block: a word from a heading pastes
+   * as a word, not as a heading. Code stays code.
+   */
+  function pick(startPosition: UiTextPosition, endPosition: UiTextPosition): Block[] | null {
+    const start = locate(startPosition);
+    const end = locate(endPosition);
+    if (start === null || end === null) {
+      return null;
+    }
+    const picked = blocks.value.slice(start.index, end.index + 1).map((current, i, all) => {
+      const from = i === 0 ? start.offset : 0;
+      const to = i === all.length - 1 ? end.offset : current.text.length;
+      return detached({ ...current, text: current.text.slice(from, to) });
+    });
+    const only = picked.length === 1 ? blocks.value[start.index]! : null;
+    if (only !== null && picked[0]!.text !== only.text && only.type !== 'code' && only.type !== 'raw') {
+      return [block('paragraph', picked[0]!.text)];
+    }
+    return picked;
+  }
 
   // The slash menu floats under its block, outside the document, with no
   // backdrop: focus stays in the block, so typing goes on filtering it.

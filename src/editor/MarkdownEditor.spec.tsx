@@ -236,6 +236,26 @@ describe('a selection across blocks', () => {
     expect(ui.runtime.editingState?.text).toBe('## Steps\n\n1. first\n2. second');
   });
 
+  it('copies as HTML beside the markdown, for pasting into a document', async () => {
+    await mount('## Steps\n\n1. **first**\n2. second');
+    await caretIn('Heading level 2', 0, 0);
+    await press('ArrowDown', { shift: true });
+    await press('ArrowDown', { shift: true });
+    await press('End', { shift: true });
+    expect(ui.runtime.editingState?.html).toBe('<h2>Steps</h2>\n<ol>\n<li><strong>first</strong></li>\n<li>second</li>\n</ol>');
+  });
+
+  it('copies part of one block as text, not as the block', async () => {
+    await mount('## Big **steps** ahead');
+    await caretIn('Heading level 2', 0, 4);
+    for (let i = 0; i < 9; i++) {
+      await press('ArrowRight', { shift: true });
+    }
+    const state = ui.runtime.editingState!;
+    expect(state.text.slice(state.selectionStart, state.selectionEnd)).toBe('**steps**');
+    expect(ui.runtime.editingState?.html).toBe('<p><strong>steps</strong></p>');
+  });
+
   it('moves between blocks with the arrows', async () => {
     await mount('one\n\ntwo');
     await caretIn('Paragraph', 0, 'end');

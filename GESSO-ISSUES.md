@@ -4,11 +4,11 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `4450c5c`. Not yet pushed or released. Every
+per fix, `2c572e3` through `53b4c46`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The last three (16 to 18) were checked with their packages'
+build. The last four (16 to 19) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now.
 
@@ -297,6 +297,21 @@ view source and back left the document 17 px narrower.
 removes what it stops declaring, through the same override cascade as
 setting it (`4450c5c`), so a style or theme underneath shows through
 again.
+
+### 19. A copy could only be plain text
+
+**What:** the shell's copy put `text/plain` on the clipboard and nothing
+else, so the editor's copy pasted into a document or an email as raw
+markdown, asterisks and all. Also, an editing group's `copyText` was
+called every frame while a selection was up, since the shell's state is
+rebuilt every frame.
+
+**Fix:** an editing group's `copyHtml(start, end)` gives HTML for the
+selection, across fields or inside one, and the shell's copy and cut
+put it on the clipboard as `text/html` beside the text (`53b4c46`). What
+a group makes of a selection is now cached until the selection or the
+text under it changes. Checked in Chrome: a copy across a heading and a
+paragraph carries both the markdown and `<h2>…</h2><p>…<strong>…`.
 
 ## Not a bug, now documented
 
