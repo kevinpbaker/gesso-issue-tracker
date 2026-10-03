@@ -111,6 +111,13 @@ describe('refining and dates', () => {
     expect(issues.every(i => i.teamId === 'web' && i.priority === 1)).toBe(true);
   });
 
+  it('needs every extra filter too, so a view’s own refinement and a new one both apply', () => {
+    const result = run({ group: 'none', filter: {}, also: [{ labelIds: ['l0'] }], refine: { labelIds: ['l1'] } });
+    const issues = issuesOf(result.ids);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every(i => i.labelIds.includes('l0') && i.labelIds.includes('l1'))).toBe(true);
+  });
+
   it('reads due dates against today, and leaves closed issues out of overdue', () => {
     const today = '2026-04-01';
     const due = (preset: 'overdue' | 'today' | 'week' | 'none') =>

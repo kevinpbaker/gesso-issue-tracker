@@ -60,6 +60,12 @@ export interface IssueQuery {
    * without touching what the screen is.
    */
   readonly refine?: IssueFilter;
+  /**
+   * More filters an issue must also match. A saved view keeps the
+   * refinement it was saved with here, so a refinement made on top of
+   * the view narrows it further instead of replacing it.
+   */
+  readonly also?: readonly IssueFilter[];
 }
 
 /** What a query needs from the world around it: the text index, and what today is. */
@@ -241,9 +247,10 @@ function comparator(field: SortField): (a: Issue, b: Issue) => number {
 export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: IssueQuery, context: QueryContext | TextSearch = {}): QueryResult {
   const world: QueryContext = typeof context === 'function' ? { search: context } : context;
   const closed = new Set(workspace.states.filter(state => state.type === 'completed' || state.type === 'canceled').map(state => state.id));
-  const own = matcher(query.filter, world, closed);
-  const refined = query.refine === undefined ? null : matcher(query.refine, world, closed);
-  const matches = refined === null ? own : (issue: Issue) => own(issue) && refined(issue);
+  const all = [query.filter, ...(query.also ?? []), ...(query.refine === undefined ? [] : [query.refine])].map(filter =>
+    matcher(filter, world, closed)
+  );
+  const matches = all.length === 1 ? all[0]! : (issue: Issue) => all.every(match => match(issue));
   const group = grouping(query.group, workspace);
   const compare = comparator(query.sort.field);
   const sign = query.sort.direction === 'asc' ? 1 : -1;

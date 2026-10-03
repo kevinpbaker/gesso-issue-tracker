@@ -15,6 +15,8 @@ import { IssueList, locate, positionOf } from './IssueList';
 import { IssueQueryService } from './IssueQueryService';
 import { Issues, type IssuesSummary } from './IssuesContract';
 import { issuesSource } from './issuesSource';
+import { Views } from '../views/ViewsContract';
+import { ViewsStore } from '../views/ViewsStore';
 
 /**
  * The list from the keyboard, as Phase 3's exit criterion asks: every
@@ -36,6 +38,7 @@ interface Mounted {
   served: ServedForTest;
   store: IssueStore;
   service: IssueQueryService;
+  views: ViewsStore;
 }
 
 let h: Mounted;
@@ -47,9 +50,17 @@ afterEach(() => {
 async function mount(): Promise<void> {
   const store = new IssueStore(seedWorkspace({ issues: 400 }));
   const service = new IssueQueryService(store);
+  const views = new ViewsStore({ read: async () => ({ outcome: 'ok', value: null }), write: async () => 'ok', remove: async () => 'ok' });
   const served = serveForTest([
     { token: Issues, source: issuesSource(service, store, () => store.reset()) },
-    { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') }
+    { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
+    {
+      token: Views,
+      source: {
+        view: { views: views.views, saved: views.saved },
+        commands: { save: ({ name, query }) => void views.save(name, query), rename: ({ id, name }) => views.rename(id, name), remove: id => views.remove(id) }
+      }
+    }
   ]);
   // Registered before the runtime builds the root, as the worker's `useService` does.
   const services = new ServiceRegistry();
@@ -60,7 +71,7 @@ async function mount(): Promise<void> {
     height: 600,
     services
   });
-  h = { ui, served, store, service };
+  h = { ui, served, store, service, views };
   await settle();
 }
 
@@ -186,5 +197,20 @@ describe('the filter bar', () => {
     await settle();
     expect(router().url.value).toBe('/team/web/list');
     expect(total().refine).toBeUndefined();
+  });
+
+  it('saves the list, filter and all, as a named view and opens it', async () => {
+    await at('/team/web/list?priority=1');
+    router().setRoutes({ routes: [route({ path: '/team/:key/list', component: Harness }), route({ path: '/view/:id', component: Harness })] });
+    h.ui.fireEvent.click(h.ui.getByRole('button', { name: 'Save as a view' }));
+    await settle();
+    // The name field has the caret; Enter saves.
+    expect(h.ui.runtime.input.focus.focusedNode).toBe(h.ui.getByRole('textbox', { name: 'Name' }));
+    h.ui.fireEvent.type('Urgent web');
+    await settle();
+    await press('Enter');
+    const [view] = h.views.views.value;
+    expect(view).toMatchObject({ name: 'Urgent web', query: { also: [{ priorities: [1] }] } });
+    expect(router().url.value).toBe(`/view/${view!.id}`);
   });
 });

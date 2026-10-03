@@ -6,8 +6,9 @@ import type { ComponentContext, Inputs } from 'gesso-framework';
 import { NavItem } from '../ui/NavItem';
 import { ThemeSwitch } from './AppShell';
 import { WorkspaceMeta } from './WorkspaceContract';
+import { Views } from '../views/ViewsContract';
 
-/** Saved views that ship with the workspace. Phase 8 lets people make their own. */
+/** Views that ship with the workspace; the ones people save follow them. */
 export const BUILT_IN_VIEWS = [
   { id: 'all', name: 'All issues' },
   { id: 'active', name: 'Active' },
@@ -23,6 +24,7 @@ function Section(inputs: Inputs<{ title: string }>, _ctx: ComponentContext) {
 
 export function Sidebar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const meta = ctx.channel(WorkspaceMeta);
+  const views = ctx.channel(Views);
 
   return (
     <column height={percent(100)} backgroundColor="surface" role="navigation" label="Sidebar">
@@ -47,6 +49,7 @@ export function Sidebar(_inputs: Inputs<{}>, ctx: ComponentContext) {
           {BUILT_IN_VIEWS.map(view => (
             <NavItem key={view.id} label={view.name} href={`/view/${view.id}`} />
           ))}
+          {views.view.views.pipe(map(saved => saved.map(view => <NavItem key={view.id} label={view.name} href={`/view/${view.id}`} />)))}
           <Section title="Projects" />
           {meta.view.projects.pipe(
             map(projects =>

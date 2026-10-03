@@ -25,6 +25,8 @@ import { IssueDetailChannel } from './detail/IssueDetailContract';
 import { IssueDetailService } from './detail/IssueDetailService';
 import { detailSource } from './detail/detailSource';
 import { SearchIndex } from './search/SearchIndex';
+import { Views } from './views/ViewsContract';
+import { ViewsStore } from './views/ViewsStore';
 import { Compose } from './compose/ComposeContract';
 import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
@@ -46,6 +48,7 @@ const preferences = new PreferencesStore(disk);
 const search = new SearchIndex(store);
 const detail = new IssueDetailService(store, ME);
 const compose = new ComposeService(store, disk, ME);
+const views = new ViewsStore(disk);
 
 const reset = (): void => {
   store.reset();
@@ -78,10 +81,22 @@ serveChannels([
         discard: () => compose.discard()
       }
     }
+  },
+  {
+    token: Views,
+    source: {
+      view: { views: views.views, saved: views.saved },
+      commands: {
+        save: ({ name, query }) => void views.save(name, query),
+        rename: ({ id, name }) => views.rename(id, name),
+        remove: id => views.remove(id)
+      }
+    }
   }
 ]);
 
 void compose.restore();
+void views.restore();
 
 void preferences.restore();
 

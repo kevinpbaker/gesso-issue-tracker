@@ -6,6 +6,7 @@ import { RouterService, type ComponentContext, type Inputs } from 'gesso-framewo
 
 import { Issues } from '../issues/IssuesContract';
 import { NewIssueService } from '../compose/NewIssueService';
+import { Views } from '../views/ViewsContract';
 import { BUILT_IN_VIEWS } from './Sidebar';
 import { WorkspaceMeta, type WorkspaceView } from './WorkspaceContract';
 
@@ -17,7 +18,11 @@ interface Place {
 }
 
 /** What the url means, in words. */
-export function placeOf(url: string, meta: Pick<WorkspaceView, 'teams' | 'projects'>): Place {
+export function placeOf(
+  url: string,
+  meta: Pick<WorkspaceView, 'teams' | 'projects'>,
+  saved: readonly { readonly id: string; readonly name: string }[] = []
+): Place {
   const path = url.split('?')[0]!;
   const team = /^\/team\/([^/]+)\/(list|board)$/.exec(path);
   if (team !== null) {
@@ -33,7 +38,10 @@ export function placeOf(url: string, meta: Pick<WorkspaceView, 'teams' | 'projec
     return { title: found === undefined ? 'Project' : `${team?.name ?? ''} › ${found.name}`, team: null, view: null };
   }
   const view = /^\/view\/([^/]+)$/.exec(path);
-  if (view !== null) return { title: BUILT_IN_VIEWS.find(v => v.id === view[1])?.name ?? 'View', team: null, view: null };
+  if (view !== null) {
+    const name = BUILT_IN_VIEWS.find(v => v.id === view[1])?.name ?? saved.find(v => v.id === view[1])?.name ?? 'View';
+    return { title: name, team: null, view: null };
+  }
   if (path === '/my-issues') return { title: 'My issues', team: null, view: null };
   if (path.startsWith('/spike/')) return { title: 'Phase 0 › Markdown editor', team: null, view: null };
   return { title: '', team: null, view: null };
@@ -44,10 +52,11 @@ export function TopBar(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const meta = ctx.channel(WorkspaceMeta);
   const issues = ctx.channel(Issues);
   const newIssue = ctx.inject(NewIssueService);
+  const views = ctx.channel(Views);
 
   const place = new BehaviorSubject<Place>({ title: '', team: null, view: null });
-  ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects]), ([url, teams, projects]) =>
-    place.next(placeOf(url, { teams, projects }))
+  ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects, views.view.views]), ([url, teams, projects, saved]) =>
+    place.next(placeOf(url, { teams, projects }, saved))
   );
 
   return (

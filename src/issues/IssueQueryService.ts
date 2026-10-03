@@ -138,7 +138,7 @@ export class IssueQueryService {
     // A different filter is a different list, and a selection made in
     // the old one would act on issues nobody can see. Sorting, grouping
     // and folding keep it: the same issues, arranged differently.
-    const shown = (q: IssueQuery) => JSON.stringify([q.filter, q.refine ?? {}]);
+    const shown = (q: IssueQuery) => JSON.stringify([q.filter, q.also ?? [], q.refine ?? {}]);
     if (shown(query) !== shown(this.query.value)) {
       this.clearSelection();
     }
