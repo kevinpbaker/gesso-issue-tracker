@@ -13,7 +13,6 @@ import {
   Select,
   Switch,
   TextInput,
-  Toast,
   type SelectOption
 } from 'gesso-components';
 import { internalState, type ComponentContext, type Inputs } from 'gesso-framework';
@@ -24,8 +23,10 @@ import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { Compose, type Draft } from './ComposeContract';
 
 /**
- * "New issue": a dialog over whatever screen is open, and a toast when
- * it has filed one.
+ * "New issue": a dialog over whatever screen is open. Filing one is a
+ * change like any other, so the shell's undo toast says so ("Filed
+ * WEB-12: …", with Undo); the dialog says it too, for "Create more",
+ * where it stays open over the page.
  *
  * `c` opens it from anywhere (the shell registers the shortcut). The
  * fields are a Gesso `form()`: the title and the team are required,
@@ -39,21 +40,7 @@ import { Compose, type Draft } from './ComposeContract';
  * dialog open after filing, with the team, status, priority, assignee
  * and labels kept for the next issue and only the words cleared.
  */
-export function NewIssueDialog(inputs: Inputs<{ open: boolean; onClose: () => void }>, ctx: ComponentContext) {
-  const compose = ctx.channel(Compose);
-  const toast = internalState<string>('');
-  // Filed with the dialog closed behind it: the page says so.
-  ctx.effect(
-    compose.view.filed.pipe(
-      skip(1),
-      filter(filed => filed !== null)
-    ),
-    filed => {
-      if (!inputs.open.value) {
-        toast.value = `Filed ${filed!.key}: ${filed!.title}`;
-      }
-    }
-  );
+export function NewIssueDialog(inputs: Inputs<{ open: boolean; onClose: () => void }>, _ctx: ComponentContext) {
   return (
     <column width={0} height={0}>
       <Dialog
@@ -63,7 +50,6 @@ export function NewIssueDialog(inputs: Inputs<{ open: boolean; onClose: () => vo
         width={600}
         content={<ComposeForm close={() => inputs.onClose.value()} />}
       />
-      <Toast open={toast.pipe(map(text => text !== ''))} message={toast} onClose={() => (toast.value = '')} />
     </column>
   );
 }

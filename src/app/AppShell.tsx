@@ -18,6 +18,7 @@ import { BUILT_IN_VIEWS } from './Sidebar';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { Tour } from './Tour';
+import { UndoToast } from './UndoToast';
 
 /**
  * The layout every screen renders inside: a sidebar, a top bar, and
@@ -28,7 +29,8 @@ import { Tour } from './Tour';
  * resolved from the saved preference and what the platform reports,
  * and provided as an environment value, so nothing below names a
  * colour that isn't a token. And it owns the shortcuts that work
- * everywhere: undo, redo, the sidebar, and `g` chords to move around.
+ * everywhere: undo, redo, the sidebar, and `g` chords to move around,
+ * and the toast that says what each change did and offers it back.
  */
 export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   const prefs = ctx.channel(Preferences);
@@ -184,6 +186,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
           </row>
         );
       })}
+      <UndoToast />
       <Tour theme={theme} />
     </row>
   );
