@@ -104,7 +104,8 @@ export function Tour(_inputs: Inputs<{}>, ctx: ComponentContext) {
       key="tour"
       position="absolute"
       right={16}
-      bottom={16}
+      // Clear of the list's selection toolbar, which the first step brings up.
+      bottom={72}
       width={300}
       maxWidth={320}
       gap={8}
@@ -112,7 +113,7 @@ export function Tour(_inputs: Inputs<{}>, ctx: ComponentContext) {
       borderRadius={10}
       borderWidth={1}
       borderColor="border"
-      backgroundColor="surfaceRaised"
+      backgroundColor="surface"
       role="region"
       label="Tour">
       <text text={step.pipe(map(at => `Tour · ${at + 1} of ${TOUR.length}`))} fontSize={11} fontWeight={600} color="textMuted" />

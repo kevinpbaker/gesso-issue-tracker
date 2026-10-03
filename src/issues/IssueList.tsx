@@ -466,7 +466,7 @@ function IssueRowView(
       posInSet={index + 1}
       setSize={inputs.total}
       backgroundColor={combineLatest([selected, atCursor]).pipe(
-        map(([on, here]) => (on ? 'surfaceRaised' : here ? 'surface' : 'background'))
+        map(([on, here]) => (on ? 'selectionBackground' : here ? 'surface' : 'background'))
       )}
       onClick={() => inputs.onOpen.value()}
       x="stretch"
@@ -511,7 +511,7 @@ function IssueRowView(
         <box width={44} flexShrink={0} x="end">
           <text text={field(r => ago(r.updatedAt), '')} fontSize={11} color="textMuted" maxLines={1} />
         </box>
-        <box width={24} height={24} borderRadius={12} backgroundColor="surfaceRaised" x="center" y="center" flexShrink={0}>
+        <box width={24} height={24} borderRadius={12} backgroundColor="controlBackground" x="center" y="center" flexShrink={0}>
           <text text={field(r => r.initials, '')} fontSize={10} fontWeight={600} color="textMuted" />
         </box>
       </row>

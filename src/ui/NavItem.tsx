@@ -4,7 +4,7 @@ import { interactive } from 'gesso-core';
 import { RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 /** Hoisted: modifier arguments are compared by identity. */
-const HOVER = interactive({ hover: true, press: false, hovered: { backgroundColor: 'surfaceRaised' } });
+const HOVER = interactive({ hover: true, press: false, hovered: { backgroundColor: 'controlBackgroundHovered' } });
 
 /**
  * One link in the sidebar: a button that navigates, and that shows it
@@ -32,7 +32,7 @@ export function NavItem(
       paddingRight={8}
       borderRadius={6}
       cursor="pointer"
-      backgroundColor={active.pipe(map(on => (on ? 'surfaceRaised' : 'surface')))}
+      backgroundColor={active.pipe(map(on => (on ? 'controlBackground' : 'surface')))}
       modifiers={[HOVER]}>
       <row x="space-between" y="center" gap={8}>
         <box flexShrink={1} minWidth={0}>

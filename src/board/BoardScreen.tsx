@@ -423,7 +423,7 @@ function Cell(inputs: Inputs<{ lane: string; stateId: string; height: number | n
             state.hint.value = null;
             board.send.move({ id: (payload.data as CardPayload).id, lane, stateId, index: indexAt(at.y) });
           },
-          over: { backgroundColor: 'surfaceRaised' },
+          over: { backgroundColor: 'controlBackgroundHovered' },
           autoScroll: { edge: 56, speed: 900 }
         })
       ]
