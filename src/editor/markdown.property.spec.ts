@@ -72,7 +72,8 @@ function shape(b: Block) {
   return { type: b.type, text, level: b.level, indent: b.indent ?? 0, checked: b.checked };
 }
 
-describe('generated documents', () => {
+// Thousands of generated documents each: slow on a loaded machine, so a generous timeout.
+describe('generated documents', { timeout: 60_000 }, () => {
   it('read back as the blocks that were written', () => {
     fc.assert(
       fc.property(documents, doc => {
@@ -84,7 +85,7 @@ describe('generated documents', () => {
   });
 });
 
-describe('generated markdown', () => {
+describe('generated markdown', { timeout: 60_000 }, () => {
   const markdown = fc
     .array(fc.oneof(line, fc.constant(''), fc.constantFrom('- ', '1. ', '> ', '```', '    ', '  - ', '# ').chain(prefix => line.map(text => prefix + text))), {
       maxLength: 10

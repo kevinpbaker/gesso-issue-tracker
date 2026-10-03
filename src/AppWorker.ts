@@ -24,6 +24,7 @@ import { createBoardStore } from './board/BoardStore';
 import { IssueDetailChannel } from './detail/IssueDetailContract';
 import { IssueDetailService } from './detail/IssueDetailService';
 import { detailSource } from './detail/detailSource';
+import { SearchIndex } from './search/SearchIndex';
 import { Compose } from './compose/ComposeContract';
 import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
@@ -42,6 +43,7 @@ const disk = new IndexedDbStorage({ database: 'gesso-issue-tracker' });
 const store = new IssueStore(seedWorkspace({ seed: SEED, issues: ISSUES }), SEED);
 const persistence = new OverlayPersistence(disk);
 const preferences = new PreferencesStore(disk);
+const search = new SearchIndex(store);
 const detail = new IssueDetailService(store, ME);
 const compose = new ComposeService(store, disk, ME);
 
@@ -64,7 +66,7 @@ serveChannels([
     }
   },
   { token: Board, source: boardSource(createBoardStore(store)) },
-  { token: Issues, source: issuesSource(new IssueQueryService(store), store, reset) },
+  { token: Issues, source: issuesSource(new IssueQueryService(store, search), store, reset) },
   { token: IssueDetailChannel, source: detailSource(detail) },
   {
     token: Compose,
@@ -90,6 +92,8 @@ void persistence.restore(store).then(outcome => {
     void persistence.clear();
   }
   persistence.watch(store);
+  // Built after the saved changes are in, so it indexes what's there.
+  search.warm();
 });
 
 self.addEventListener('beforeunload', () => {

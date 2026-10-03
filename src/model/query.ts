@@ -24,7 +24,11 @@ export interface IssueFilter {
   /** Matches an issue carrying any of these labels. */
   readonly labelIds?: readonly string[];
   readonly priorities?: readonly number[];
-  /** Matched case-insensitively against the title and the key. */
+  /**
+   * Words to find. With a search index (the app worker has one), every
+   * word must start a word of the title, the description or a comment;
+   * without one, the text is matched against the key and the title.
+   */
   readonly text?: string;
 }
 
@@ -77,7 +81,10 @@ function haystack(issue: Issue): string {
   return text;
 }
 
-function matcher(filter: IssueFilter): (issue: Issue) => boolean {
+/** Full-text search: the IDs of the issues matching some text, or null when the text has no words. */
+export type TextSearch = (text: string) => ReadonlySet<string> | null;
+
+function matcher(filter: IssueFilter, search?: TextSearch): (issue: Issue) => boolean {
   const set = (values: readonly (string | number)[] | undefined) =>
     values === undefined || values.length === 0 ? null : new Set<string | number>(values);
   const teams = set(filter.teamIds);
@@ -87,6 +94,7 @@ function matcher(filter: IssueFilter): (issue: Issue) => boolean {
   const labels = set(filter.labelIds);
   const priorities = set(filter.priorities);
   const text = filter.text?.trim().toLowerCase() ?? '';
+  const found = text === '' || search === undefined ? null : search(text);
 
   return issue =>
     (teams === null || teams.has(issue.teamId)) &&
@@ -95,7 +103,7 @@ function matcher(filter: IssueFilter): (issue: Issue) => boolean {
     (projects === null || projects.has(issue.projectId ?? NONE)) &&
     (priorities === null || priorities.has(issue.priority)) &&
     (labels === null || issue.labelIds.some(id => labels.has(id))) &&
-    (text === '' || haystack(issue).includes(text));
+    (text === '' || (found !== null ? found.has(issue.id) : search === undefined && haystack(issue).includes(text)));
 }
 
 interface Grouping {
@@ -178,8 +186,8 @@ function comparator(field: SortField): (a: Issue, b: Issue) => number {
   }
 }
 
-export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: IssueQuery): QueryResult {
-  const matches = matcher(query.filter);
+export function runQuery(workspace: Workspace, issues: Iterable<Issue>, query: IssueQuery, search?: TextSearch): QueryResult {
+  const matches = matcher(query.filter, search);
   const group = grouping(query.group, workspace);
   const compare = comparator(query.sort.field);
   const sign = query.sort.direction === 'asc' ? 1 : -1;

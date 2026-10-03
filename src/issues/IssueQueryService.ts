@@ -3,6 +3,7 @@ import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
 
 import type { IssueStore } from '../model/IssueStore';
 import { DEFAULT_QUERY, runQuery, type IssueQuery, type QueryResult } from '../model/query';
+import type { SearchIndex } from '../search/SearchIndex';
 import type { Issue } from '../model/types';
 import type { IssueRow, IssuesSummary } from './IssuesContract';
 
@@ -40,7 +41,10 @@ export class IssueQueryService {
   readonly selected;
   readonly selectedCount;
 
-  constructor(private readonly store: IssueStore) {
+  constructor(
+    private readonly store: IssueStore,
+    private readonly search?: SearchIndex
+  ) {
     const { workspace } = store;
     this.names = {
       states: new Map(workspace.states.map(state => [state.id, state.name])),
@@ -64,7 +68,7 @@ export class IssueQueryService {
     this.result = combineLatest([this.query, store.version]).pipe(
       map(([query]): QueryResult => {
         const started = performance.now();
-        const result = runQuery(workspace, store.issues(), query);
+        const result = runQuery(workspace, store.issues(), query, this.search === undefined ? undefined : text => this.search!.search(text));
         this.last = result;
         this.lastMs = Math.round((performance.now() - started) * 10) / 10;
         return result;
