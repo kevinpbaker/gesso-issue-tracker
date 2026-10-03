@@ -13,12 +13,14 @@ import {
   type UiNode,
   type UiTextPosition
 } from 'gesso-core';
-import { internalState, type ComponentContext, type Inputs } from 'gesso-framework';
+import { EditingService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { chunk } from './chunks';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
 import { inlineRuns } from './inline';
+import { makeLink, toggleMark, type Mark } from './formatting';
 import { block, continuation, detached, inputRule, isList, parse, serialize, type Block } from './markdown';
+import { pastedBlocks, pastedMarkdown } from './paste';
 
 /**
  * A rich text editor for markdown, drawn by Gesso.
@@ -51,6 +53,8 @@ export interface MarkdownEditorProps {
 interface FocusRequest {
   readonly id: string;
   readonly caret: number;
+  /** Where the selection starts, when it isn't just a caret. */
+  readonly anchor?: number;
 }
 
 /**
@@ -66,8 +70,8 @@ class FocusRequests {
   private pending: FocusRequest | null = null;
   readonly stream = new Subject<FocusRequest>();
 
-  send(id: string, caret: number): void {
-    this.pending = { id, caret };
+  send(id: string, caret: number, anchor?: number): void {
+    this.pending = anchor === undefined ? { id, caret } : { id, caret, anchor };
     this.stream.next(this.pending);
   }
 
@@ -82,12 +86,18 @@ class FocusRequests {
   }
 }
 
-const focusRequests = defineModifier<{ id: string; requests: FocusRequests; fields: WeakMap<UiNode, string> }>({
+const focusRequests = defineModifier<{ id: string; requests: FocusRequests; fields: Fields }>({
   name: 'focusRequests',
   attach(host: UiModifierHost, args) {
     // Which block a field is, for edits over a selection that spans
-    // fields: Gesso reports those by node.
-    args.fields.set(host.node, args.id);
+    // fields: Gesso reports those by node, and is told them by node.
+    args.fields.block.set(host.node, args.id);
+    args.fields.node.set(args.id, host.node);
+    host.own(() => {
+      if (args.fields.node.get(args.id) === host.node) {
+        args.fields.node.delete(args.id);
+      }
+    });
     const apply = (): void => {
       const request = args.requests.take(args.id);
       if (request === null) {
@@ -98,13 +108,19 @@ const focusRequests = defineModifier<{ id: string; requests: FocusRequests; fiel
       // is clamped against the text this edit produced.
       const model = editorFor(host.node);
       const caret = Math.min(request.caret, model.text.length);
-      model.select(caret, caret);
+      model.select(Math.min(request.anchor ?? caret, model.text.length), caret);
     };
     apply();
     const subscription = args.requests.stream.pipe(filter(request => request.id === args.id)).subscribe(apply);
     host.own(() => subscription.unsubscribe());
   }
 });
+
+/** Fields and blocks, each way round. */
+interface Fields {
+  readonly block: WeakMap<UiNode, string>;
+  readonly node: Map<string, UiNode>;
+}
 
 interface BlockHandlers {
   input(id: string, text: string, caret: number): void;
@@ -113,6 +129,10 @@ interface BlockHandlers {
   backspaceAtStart(id: string): void;
   indent(id: string, by: 1 | -1, caret: number): boolean;
   toggle(id: string): void;
+  /** Bold, italic, code, strikethrough or a link over the block's selection, or over a selection across blocks. */
+  format(id: string, kind: Mark | 'link', start: number, end: number): void;
+  /** True when the editor took the paste, false to let the field insert it as text. */
+  paste(id: string, start: number, end: number, text: string, html: string | null): boolean;
   undo(): void;
   redo(): void;
   /** The caret moved by itself: the next character starts a new undo step. */
@@ -125,14 +145,15 @@ interface Context {
   readonly numberOf: (id: string) => Observable<number>;
   readonly requests: FocusRequests;
   readonly handlers: BlockHandlers;
-  readonly fields: WeakMap<UiNode, string>;
+  readonly fields: Fields;
 }
 
 export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: ComponentContext) {
   const blocks = internalState<readonly Block[]>(parse(inputs.value.value));
   const history = new DocumentHistory();
   const requests = new FocusRequests();
-  const fields = new WeakMap<UiNode, string>();
+  const fields: Fields = { block: new WeakMap(), node: new Map() };
+  const editing = ctx.inject(EditingService);
 
   // Everything the views read, worked out from one document state at a
   // time. Separate streams over \`blocks\` update in subscription order,
@@ -170,15 +191,21 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     map(joined => joined.split('|'))
   );
 
-  const focus = (id: string, caret: number): void => requests.send(id, caret);
+  const focus = (id: string, caret: number, anchor?: number): void => requests.send(id, caret, anchor);
   const indexOf = (id: string): number => blocks.value.findIndex(b => b.id === id);
 
   /** Applies an edit and records it, so it can be undone. */
-  const commit = (next: readonly Block[], caret: Caret | null, kind: EditKind, before: DocumentState): void => {
+  const commit = (
+    next: readonly Block[],
+    caret: Caret | null,
+    kind: EditKind,
+    before: DocumentState,
+    anchor?: number
+  ): void => {
     history.record(before, { blocks: next, caret }, kind);
     blocks.value = next;
     if (caret !== null) {
-      focus(caret.id, caret.offset);
+      focus(caret.id, caret.offset, anchor);
     }
   };
   const replaced = (index: number, next: readonly Block[], deleteCount = 1): Block[] => {
@@ -196,6 +223,69 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     if (state.caret !== null) {
       focus(state.caret.id, state.caret.offset);
     }
+  };
+
+  /** The selection across blocks, while there is one; see the group below. */
+  let span: { start: { index: number; offset: number }; end: { index: number; offset: number } } | null = null;
+
+  /** Whether a block's text is inline markdown that formatting and pasting apply to. */
+  const inline = (current: Block): boolean => current.type !== 'code' && current.type !== 'raw' && current.type !== 'rule';
+
+  /**
+   * Replaces a range of the document, from a place in one block to a
+   * place in the same or a later one, with inline text or with pasted
+   * blocks, as one undo step.
+   *
+   * Pasted blocks are spliced in the way a document editor does it: the
+   * first joins the text before the range when both are plain text, the
+   * last takes the text after it, and everything between stands as it
+   * was pasted. Text pasted at the start of a list item keeps the item.
+   */
+  const replaceRange = (
+    start: { index: number; offset: number },
+    end: { index: number; offset: number },
+    insertion: string | readonly Block[]
+  ): void => {
+    const list = blocks.value;
+    const first = list[start.index]!;
+    const last = list[end.index]!;
+    const head = first.text.slice(0, start.offset);
+    const tail = last.text.slice(end.offset);
+    const count = end.index - start.index + 1;
+    const before = here(first.id, start.offset);
+    if (typeof insertion === 'string' || insertion.length === 0) {
+      const text = typeof insertion === 'string' ? insertion : '';
+      commit(
+        replaced(start.index, [{ ...first, text: head + text + tail }], count),
+        { id: first.id, offset: head.length + text.length },
+        'structure',
+        before
+      );
+      return;
+    }
+    const pasted = [...insertion];
+    const out: Block[] = [];
+    if (head !== '' || first.type !== 'paragraph') {
+      if (pasted[0]!.type === 'paragraph' && inline(first)) {
+        out.push({ ...first, text: head + pasted.shift()!.text });
+      } else if (head !== '') {
+        out.push({ ...first, text: head });
+      }
+    }
+    out.push(...pasted);
+    if (out.length === 0) {
+      out.push({ ...first, text: head });
+    }
+    const end_ = out[out.length - 1]!;
+    const caret = { id: end_.id, offset: end_.text.length };
+    if (tail !== '') {
+      if (inline(end_)) {
+        out[out.length - 1] = { ...end_, text: end_.text + tail };
+      } else {
+        out.push(block('paragraph', tail));
+      }
+    }
+    commit(replaced(start.index, out, count), caret, 'structure', before);
   };
 
   const handlers: BlockHandlers = {
@@ -296,6 +386,60 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const current = blocks.value[index]!;
       commit(replaced(index, [{ ...current, checked: current.checked !== true }]), null, 'format', { blocks: blocks.value, caret: null });
     },
+    format(id, kind, start, end) {
+      if (span !== null) {
+        // Over every block the selection covers, each block's part.
+        const { start: from, end: to } = span;
+        const list = [...blocks.value];
+        let first: { id: string; offset: number } | null = null;
+        let last: { id: string; offset: number } | null = null;
+        for (let index = from.index; index <= to.index; index++) {
+          const current = list[index]!;
+          const a = index === from.index ? from.offset : 0;
+          const b = index === to.index ? to.offset : current.text.length;
+          if (!inline(current) || b <= a || kind === 'link') {
+            continue;
+          }
+          const done = toggleMark(current.text, a, b, kind);
+          list[index] = { ...current, text: done.text };
+          first ??= { id: current.id, offset: done.start };
+          last = { id: current.id, offset: done.end };
+        }
+        if (first === null || last === null) {
+          return;
+        }
+        history.record({ blocks: blocks.value, caret: null }, { blocks: list, caret: last }, 'format');
+        blocks.value = list;
+        // Still selected, from the first block's part to the last's.
+        const anchor = fields.node.get(first.id);
+        const end = fields.node.get(last.id);
+        if (anchor === undefined || end === undefined || !editing.select({ node: anchor, offset: first.offset }, { node: end, offset: last.offset })) {
+          focus(last.id, last.offset);
+        }
+        return;
+      }
+      const index = indexOf(id);
+      const current = blocks.value[index];
+      if (current === undefined || !inline(current)) {
+        return;
+      }
+      const done = kind === 'link' ? makeLink(current.text, start, end) : toggleMark(current.text, start, end, kind);
+      commit(replaced(index, [{ ...current, text: done.text }]), { id, offset: done.end }, 'format', here(id, end), done.start);
+    },
+    paste(id, start, end, text, html) {
+      const index = indexOf(id);
+      const current = blocks.value[index];
+      if (current === undefined || !inline(current)) {
+        return false;
+      }
+      const markdown = pastedMarkdown(text, html);
+      const pasted = pastedBlocks(markdown);
+      if (pasted === null && markdown === text) {
+        return false;
+      }
+      replaceRange({ index, offset: start }, { index, offset: end }, pasted ?? markdown);
+      return true;
+    },
     undo: () => restore(history.undo()),
     redo: () => restore(history.redo()),
     moved: () => history.breakRun()
@@ -309,7 +453,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
 
   /** Where a position Gesso reports is, in the document. */
   const locate = (position: UiTextPosition): { index: number; offset: number } | null => {
-    const id = fields.get(position.node);
+    const id = fields.block.get(position.node);
     const index = id === undefined ? -1 : indexOf(id);
     return index < 0 ? null : { index, offset: position.offset };
   };
@@ -318,10 +462,20 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
   // blocks joins what is left of the first to what is left of the last,
   // as a document editor does: the result keeps the first block's type.
   const group: UiEditingGroup = {
+    onSelectionChange(selection) {
+      const start = selection === null ? null : locate(selection.start);
+      const end = selection === null ? null : locate(selection.end);
+      span = start === null || end === null ? null : { start, end };
+    },
     onEdit(edit: UiGroupEdit) {
       const start = locate(edit.start);
       const end = locate(edit.end);
       if (start === null || end === null) {
+        return;
+      }
+      if (edit.inputType === 'insertFromPaste') {
+        const markdown = pastedMarkdown(edit.data ?? '', edit.html ?? null);
+        replaceRange(start, end, pastedBlocks(markdown) ?? markdown);
         return;
       }
       const list = blocks.value;
@@ -462,7 +616,11 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     const caret = model.collapsed ? model.focus : -1;
     const { shift, meta, ctrl } = event.modifiers;
     const command = meta || ctrl;
-    if (command && (event.key === 'z' || event.key === 'Z')) {
+    const formatting = command ? shortcutMark(event.key, shift) : null;
+    if (formatting !== null) {
+      handlers.format(id, formatting, model.start, model.end);
+      event.preventDefault();
+    } else if (command && (event.key === 'z' || event.key === 'Z')) {
       // The document's history, not the field's, and not the app's either:
       // a key taken here never reaches a shortcut registered above.
       if (shift) handlers.redo();
@@ -485,6 +643,14 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
   };
 
   const onBeforeInput = (event: UiBeforeInputEvent): void => {
+    if (event.inputType === 'insertFromPaste' && event.currentTarget !== null) {
+      // Markdown and HTML become blocks; a plain line of text is the field's.
+      const model = editorFor(event.currentTarget);
+      if (handlers.paste(id, model.start, model.end, event.data ?? '', event.html)) {
+        event.preventDefault();
+      }
+      return;
+    }
     // Undo from anywhere else (a menu, the platform's own gesture) arrives
     // here rather than as a key.
     if (event.inputType === 'historyUndo') {
@@ -593,6 +759,24 @@ function numbering(list: readonly Block[]): Map<string, number> {
     }
   }
   return out;
+}
+
+/** The formatting a shortcut asks for: Mod+B, I, E (code), K (link) and Shift+X (strikethrough). */
+function shortcutMark(key: string, shift: boolean): Mark | 'link' | null {
+  switch (key.toLowerCase()) {
+    case 'b':
+      return shift ? null : 'bold';
+    case 'i':
+      return shift ? null : 'italic';
+    case 'e':
+      return shift ? null : 'code';
+    case 'k':
+      return shift ? null : 'link';
+    case 'x':
+      return shift ? 'strike' : null;
+    default:
+      return null;
+  }
 }
 
 function label(current: Block): string {

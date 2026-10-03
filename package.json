@@ -16,6 +16,8 @@
     "gesso-components": "^0.4.2",
     "gesso-core": "^0.4.2",
     "gesso-framework": "^0.4.2",
+    "hast-util-from-html": "^2.0.3",
+    "hast-util-to-mdast": "^10.1.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {

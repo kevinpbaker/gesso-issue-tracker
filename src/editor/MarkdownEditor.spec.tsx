@@ -250,6 +250,97 @@ describe('a selection across blocks', () => {
   });
 });
 
+describe('formatting', () => {
+  async function selectIn(label: string, index: number, start: number, end: number): Promise<void> {
+    const field = ui.getAllByRole('textbox', { name: label })[index]!;
+    ui.fireEvent.focus(field);
+    editorFor(field).select(start, end);
+    await ui.settle();
+  }
+
+  it('makes the selection bold with Mod+B, and not bold again', async () => {
+    await mount('make this bold');
+    await selectIn('Paragraph', 0, 5, 9);
+    await press('b', { meta: true });
+    expect(source()).toBe('make **this** bold');
+    await press('b', { meta: true });
+    expect(source()).toBe('make this bold');
+  });
+
+  it('formats every block a selection across blocks covers', async () => {
+    await mount('first line\n\nsecond line');
+    await selectIn('Paragraph', 0, 6, 6);
+    await press('ArrowDown', { shift: true });
+    await press('i', { meta: true });
+    expect(source()).toBe('first _line_\n\n_second_ line');
+    // Still selected, so pressing it again takes it off.
+    await press('i', { meta: true });
+    expect(source()).toBe('first line\n\nsecond line');
+  });
+
+  it('makes a link with Mod+K and lets the address be typed', async () => {
+    await mount('see the docs');
+    await selectIn('Paragraph', 0, 8, 12);
+    await press('k', { meta: true });
+    await type('https://gesso.dev');
+    expect(source()).toBe('see the [docs](https://gesso.dev)');
+  });
+
+  it('leaves code blocks alone', async () => {
+    await mount('```\nconst a = 1;\n```');
+    await selectIn('Code block', 0, 0, 5);
+    await press('b', { meta: true });
+    expect(source()).toBe('```\nconst a = 1;\n```');
+  });
+});
+
+describe('pasting', () => {
+  it('pastes markdown as blocks, splitting the paragraph it lands in', async () => {
+    await mount('before after');
+    await caretIn('Paragraph', 0, 7);
+    ui.fireEvent.paste('one\n\n- two\n- three');
+    await ui.settle();
+    expect(source()).toBe('before one\n\n- two\n- threeafter');
+  });
+
+  it('converts pasted HTML to markdown', async () => {
+    await mount('x');
+    await caretIn('Paragraph', 0, 'end');
+    ui.fireEvent.paste('Steps one', '<h2>Steps</h2><ol><li>one</li></ol>');
+    await ui.settle();
+    expect(source()).toBe('x\n\n## Steps\n\n1. one');
+  });
+
+  it('keeps inline formatting from pasted HTML in the same paragraph', async () => {
+    await mount('ab');
+    await caretIn('Paragraph', 0, 1);
+    ui.fireEvent.paste('bold', '<b>bold</b>');
+    await ui.settle();
+    expect(source()).toBe('a**bold**b');
+  });
+
+  it('lets a field take a plain line of text, and makes a markdown line its block', async () => {
+    await mount('ab');
+    await caretIn('Paragraph', 0, 1);
+    ui.fireEvent.paste('just words');
+    await ui.settle();
+    expect(source()).toBe('ajust wordsb');
+    await caretIn('Paragraph', 0, 1);
+    ui.fireEvent.paste('# Heading');
+    await ui.settle();
+    expect(source()).toBe('a\n\n# Headingjust wordsb');
+  });
+
+  it('pastes over a selection across blocks', async () => {
+    await mount('one two\n\nthree four');
+    await caretIn('Paragraph', 0, 3);
+    await press('ArrowDown', { shift: true });
+    ui.fireEvent.paste('X\n\nY');
+    await ui.settle();
+    expect(source()).toBe('oneX\n\nYee four');
+  });
+});
+
 describe('a 5,000-line document', () => {
   it('re-measures a handful of nodes per keystroke, and a chunk for an Enter', async () => {
     ui = renderTest(createComponent(MarkdownEditor, { value: bigDocument() }), { width: 900, height: 700 });

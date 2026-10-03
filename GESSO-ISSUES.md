@@ -4,10 +4,10 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `f0ade22`. Not yet pushed or released. Every
+per fix, `2c572e3` through `29a36ac`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passes with them: format,
-lint, types, 4,480 tests, build, API reports and the docs build.
+lint, types, 4,485 tests, build, API reports and the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -221,6 +221,32 @@ the editor's `copyText` makes that markdown. Specs:
 `editingGroup.spec.tsx` in Gesso, and "a selection across blocks" in
 `MarkdownEditor.spec.tsx`. Checked by hand in Chrome: a drag across
 three list items, typing over it, and undoing back.
+
+### 13. A paste lost its HTML
+
+**What:** the shell read only `text/plain`, so a copy from a web page or
+a document reached the editor without its headings, lists and links.
+
+**Fix:** the editing proxy and the semantics mirror read `text/html`
+too, the paste message carries it to the worker, and it arrives as
+`html` on the `insertFromPaste` `onBeforeInput`, on a `Paste` event and
+on an editing group's edit (`b7c9514`). The editor converts it to
+markdown. Specs: `EditingProxy.spec.ts`, `renderRoot.editing.spec.ts`
+and `editingGroup.spec.tsx`. Checked in Chrome with a real
+`ClipboardEvent` carrying HTML.
+
+### 14. An editor couldn't act on a selection across blocks
+
+**What:** Mod+B reaches the focused field first, and that field holds
+only its part of a selection across blocks, so the editor couldn't
+know what to make bold, and afterwards it could only leave a caret,
+since nothing could set a selection across fields from code.
+
+**Fix:** an editing group's `onSelectionChange` hears the selection
+begin, move and end (`101ea8a`), and `EditingService.select(anchor,
+focus)` sets one, in a field or across a group (`29a36ac`). The editor
+formats every block the selection covers and leaves it selected, so a
+second Mod+B takes the bold off again.
 
 ## Not a bug, now documented
 
