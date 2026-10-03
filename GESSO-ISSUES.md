@@ -4,14 +4,14 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `d3ab865` (another session's commits are
+per fix, `2c572e3` through `dc7f199` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 51) were checked with their packages'
+build. The ones since (16 to 52) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now. After 51, the whole
 test suite passed: 4,691 tests.
@@ -639,6 +639,20 @@ a pixel or two.
 list, each frame sets a clamped position, and a frame never moves
 against the latest step (`50d1638`, docs `d3ab865`). Confirmed on the
 MacBook Pro.
+
+### 52. A copy couldn't say whether it worked
+
+**What:** `ShellService.copyText` returned nothing, so "Copy link" could
+only say "Copied" whether or not the browser had refused. And it does
+refuse: a key pressed in the render worker reaches the window's
+clipboard a message later, the async clipboard wants a focused document
+(the preview pane's denies it outright), and the `execCommand` fallback
+wants a gesture.
+
+**Fix:** `copyText` returns a promise of whether the text landed. The
+request carries an id, the shell answers with `clipboardResult`, and
+`writeClipboard` reports what the async clipboard or the fallback did
+(`dc7f199`). The tracker says "Couldn't copy the link" when it's false.
 
 ### Tooling
 

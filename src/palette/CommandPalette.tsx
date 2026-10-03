@@ -21,6 +21,10 @@ import { Palette, type PaletteItem } from './PaletteContract';
  * the field's `activeDescendant`, Enter runs it and Escape closes. The
  * palette closes before a command runs, so the command acts where focus
  * was when the palette opened.
+ *
+ * It also shows what a command had to say (`CommandsService.say`), such
+ * as "Copied WEB-12's link": a small note at the bottom of the window
+ * for a moment, read out politely, and taking no focus.
  */
 export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const service = ctx.inject(CommandsService);
@@ -30,6 +34,7 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const scroll = ctx.inject(ScrollService);
   const palette = ctx.channel(Palette);
   const overlay = useOverlay(ctx, 'palette');
+  const note = useOverlay(ctx, 'palette-notice');
 
   const query = new BehaviorSubject('');
   const active = new BehaviorSubject(0);
@@ -117,6 +122,30 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
 
   ctx.effect(service.open.pipe(distinctUntilChanged()), open => (open ? show() : close()));
 
+  // What a command said: shown for a moment, and read out from a status
+  // that's always there, since one that arrives already holding its text
+  // isn't reliably read. It's emptied afterwards, so the same words next
+  // time are a change a screen reader hears.
+  const said = new BehaviorSubject('');
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  ctx.onUnmount(() => clearTimeout(noteTimer));
+  ctx.effect(service.notice, notice => {
+    if (notice === null) return;
+    clearTimeout(noteTimer);
+    said.next(notice.text);
+    note.hide();
+    note.show(
+      <row padding={8} paddingLeft={12} paddingRight={12} borderRadius={8} backgroundColor="surface" borderColor="border" borderWidth={1}>
+        <text text={notice.text} fontSize={12} color="text" selectable={false} />
+      </row>,
+      { bottom: 24, center: 'x', environment: placeholder }
+    );
+    noteTimer = setTimeout(() => {
+      note.hide();
+      said.next('');
+    }, NOTICE_MS);
+  });
+
   const onKeyDown = (event: UiKeyboardEvent): void => {
     const consume = (): void => {
       event.preventDefault();
@@ -180,7 +209,9 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
               list.forEach((item, index) => {
                 if (item.group !== group) {
                   group = item.group;
-                  out.push(<text key={`g:${group}`} text={group} fontSize={11} fontWeight={600} color="textMuted" paddingLeft={10} paddingTop={8} paddingBottom={4} />);
+                  // Keyed by place too: a ranked list can come back to a
+                  // group it left, and two headings can't share a key.
+                  out.push(<text key={`g:${index}:${group}`} text={group} fontSize={11} fontWeight={600} color="textMuted" paddingLeft={10} paddingTop={8} paddingBottom={4} />);
                 }
                 const command = item.kind === 'command' ? commands.get(item.id) : undefined;
                 out.push(
@@ -216,8 +247,15 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     </column>
   );
 
-  return <box ref={(node: UiNode | null) => (placeholder = node)} width={0} height={0} />;
+  return (
+    <box ref={(node: UiNode | null) => (placeholder = node)} width={0} height={0}>
+      <text text={said} label={said} role="status" live="polite" height={0} opacity={0} />
+    </box>
+  );
 }
+
+/** How long a command's note stays up. */
+const NOTICE_MS = 2500;
 
 function itemKey(item: PaletteItem | undefined): string {
   return item === undefined ? '' : `${item.kind}:${item.id}`;

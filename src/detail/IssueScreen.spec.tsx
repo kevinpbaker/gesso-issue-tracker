@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { editorFor, percent, type UiNode } from 'gesso-core';
+import { editorFor, percent, shortcuts, type UiNode } from 'gesso-core';
 import { addDays, todayIso } from 'gesso-components';
 import { createComponent, route, RouterService, ServiceRegistry, type ComponentContext, type Inputs } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
@@ -21,12 +21,15 @@ import { detailSource } from './detailSource';
  * The issue page from the keyboard: Phase 6. Every property is set
  * with the keys a person would press, a sub-issue and a link are found
  * by searching, the description and a comment are written in the
- * editor, and then the page is reloaded from what was saved.
+ * editor, and then the page is reloaded from what was saved. And the
+ * issue's link and key copy.
  */
 
-function Page(_inputs: Inputs<{}>, _ctx: ComponentContext) {
+function Page(_inputs: Inputs<{}>, ctx: ComponentContext) {
+  // The shell's one listener for the keys screens register.
+  const { registry } = ctx.inject(ShortcutsService);
   return (
-    <column width={percent(100)} height={percent(100)}>
+    <column width={percent(100)} height={percent(100)} modifiers={[shortcuts({ registry })]}>
       <IssueScreen />
     </column>
   );
@@ -36,12 +39,18 @@ interface Mounted {
   ui: Rendered;
   served: ServedForTest;
   store: IssueStore;
+  /** What was put on the clipboard. */
+  copied: string[];
 }
 
 let h: Mounted;
+/** What the shell answers a copy with: whether the browser took it. */
+let clipboardWorks = true;
 afterEach(() => {
   h?.ui.unmount();
   h?.served.dispose();
+  clipboardWorks = true;
+  vi.unstubAllGlobals();
 });
 
 const fresh = (): IssueStore => new IssueStore(seedWorkspace({ issues: 300 }), 1);
@@ -55,10 +64,17 @@ async function mount(store: IssueStore, key: string): Promise<void> {
   services.register(ShortcutsService);
   services.register(CommandsService);
   const ui = renderTest(createComponent(Page), { channels: served.registry, width: 1400, height: 1400, services });
+  // The shell's half of a copy, as the main thread does it.
+  const copied: string[] = [];
+  ui.runtime.onShellRequest(request => {
+    if (request.type !== 'clipboard') return;
+    if (clipboardWorks) copied.push(request.text);
+    ui.runtime.settleClipboard(request.id, clipboardWorks);
+  });
   const router = ui.runtime.services.get(RouterService);
   router.setRoutes({ routes: [route({ path: '/issue/:key', component: Page })] });
   router.navigate(`/issue/${key}`);
-  h = { ui, served, store };
+  h = { ui, served, store, copied };
   await settle();
 }
 
@@ -217,6 +233,38 @@ describe('the issue page', () => {
     await focus(h.ui.getByRole('button', { name: new RegExp(`^Remove the link: .* ${other!.key}$`) }));
     await press('Enter');
     expect(focused()).toBe(control('combobox', 'Link to an issue'));
+  });
+
+  it("copies the issue's link and key, from the page, the palette and Mod+Shift+C, and says so", async () => {
+    vi.stubGlobal('location', { origin: 'https://tracker.test' });
+    await mount(fresh(), 'WEB-12');
+    const commands = h.ui.runtime.services.get(CommandsService);
+    const link = 'https://tracker.test/issue/WEB-12';
+
+    await press('C', { ctrl: true, shift: true });
+    expect(h.copied).toEqual([link]);
+    expect(commands.notice.value?.text).toBe("Copied WEB-12's link");
+
+    h.ui.fireEvent.click(h.ui.getByRole('button', { name: 'Copy key' }));
+    await settle();
+    expect(h.copied).toEqual([link, 'WEB-12']);
+    expect(commands.notice.value?.text).toBe('Copied WEB-12');
+
+    // The palette offers both, under the issue's key.
+    const offered = commands.commands().filter(command => command.group === 'WEB-12' && command.label.startsWith('Copy'));
+    expect(offered.map(command => command.label)).toEqual(['Copy link', 'Copy key']);
+    offered[0]!.run();
+    h.ui.fireEvent.click(h.ui.getByRole('button', { name: 'Copy link' }));
+    await settle();
+    expect(h.copied).toEqual([link, 'WEB-12', link, link]);
+  });
+
+  it("doesn't say it copied when the browser refused", async () => {
+    clipboardWorks = false;
+    await mount(fresh(), 'WEB-12');
+    await press('C', { ctrl: true, shift: true });
+    expect(h.copied).toEqual([]);
+    expect(h.ui.runtime.services.get(CommandsService).notice.value?.text).toBe("Couldn't copy the link");
   });
 
   it('says so when no issue has the key', async () => {

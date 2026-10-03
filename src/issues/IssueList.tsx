@@ -5,13 +5,14 @@ import { autoFocus, focusRing, interactive, LazyColumn, percent, scrollPosition,
 import { Button, Select } from 'gesso-components';
 import { FocusService, formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
+import { useCopyIssue, type CopyWhat } from '../app/copyIssue';
 import { ShortcutsService } from '../app/ShortcutsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import type { GroupField, IssueFilter, IssueQuery, QueryGroup, SortField } from '../model/query';
 import { FilterBar } from './FilterBar';
 import { SaveViewDialog } from '../views/SaveViewDialog';
 import { CommandsService } from '../palette/CommandsService';
-import { propertyCommands } from '../palette/propertyCommands';
+import { COPY_LINK, copyCommands, propertyCommands } from '../palette/propertyCommands';
 import { filterFromQuery, filterToQuery, isEmptyFilter } from './filterUrl';
 import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { PriorityIcon } from '../ui/PriorityIcon';
@@ -219,6 +220,14 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     const row = id === undefined ? undefined : issues.view.rows.value[id];
     if (row !== undefined) router.navigate(`/issue/${row.key}`);
   };
+  // The issue under the cursor's link or key, from the palette or Mod+Shift+C.
+  const copyIssue = useCopyIssue(ctx);
+  const copyAtCursor = (what: CopyWhat): void => {
+    const id = issues.view.window.value[String(cursor.value)];
+    const row = id === undefined ? undefined : issues.view.rows.value[id];
+    if (row !== undefined) copyIssue(row.key, what);
+  };
+  ctx.onUnmount(commands.register(() => (total() === 0 ? [] : copyCommands('List', copyAtCursor))));
   const fold = (key: string): void => {
     const current = collapsed.value;
     collapsed.value = current.includes(key) ? current.filter(k => k !== key) : [...current, key];
@@ -309,6 +318,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
         key('Shift+ArrowUp', 'Extend the selection up', () => move(-1, true)),
         key('x', 'Select the issue', () => toggle()),
         key('Enter', 'Open the issue', () => open()),
+        key('Mod+Shift+C', COPY_LINK, () => copyAtCursor('link')),
         key('Escape', 'Clear the selection', () => issues.send.clearSelection()),
         key('Mod+A', 'Select every issue', () => {
           if (total() > 0) issues.send.select({ ranges: [[0, total() - 1]], mode: 'replace' });

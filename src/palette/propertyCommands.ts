@@ -1,6 +1,18 @@
 import type { WorkspaceView } from '../app/WorkspaceContract';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
+import type { CopyWhat } from '../app/copyIssue';
 import type { PaletteCommand } from './CommandsService';
+
+/** The label of the command, and of its shortcut, so the palette lists the two as one. */
+export const COPY_LINK = 'Copy link';
+
+/** Copying an issue's link or its key, for whichever issue the caller means. */
+export function copyCommands(group: string, copy: (what: CopyWhat) => void): PaletteCommand[] {
+  return [
+    { id: `${group}:copy-link`, label: COPY_LINK, group, keywords: 'url address share clipboard', run: () => copy('link') },
+    { id: `${group}:copy-key`, label: 'Copy key', group, keywords: 'id identifier clipboard', run: () => copy('key') }
+  ];
+}
 
 /**
  * The commands that change issues' properties: every status, priority,

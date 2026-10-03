@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { percent, shortcut, shortcuts } from 'gesso-core';
 import { createComponent, route, RouterService, ServiceRegistry, type ComponentContext, type Inputs } from 'gesso-framework';
@@ -19,7 +19,7 @@ import { Views } from '../views/ViewsContract';
 import { ViewsStore } from '../views/ViewsStore';
 import { CommandPalette } from './CommandPalette';
 import { CommandsService } from './CommandsService';
-import { Palette } from './PaletteContract';
+import { Palette, type CatalogEntry } from './PaletteContract';
 import { PaletteService } from './PaletteService';
 
 /**
@@ -27,6 +27,8 @@ import { PaletteService } from './PaletteService';
  * found in it. Whatever shortcut is live where focus is shows up in its
  * catalog, the selection's commands are there while issues are
  * selected, a fuzzy query finds and runs one, and a key opens an issue.
+ * And what a command has to say, such as a copy's "Copied", it shows
+ * and reads out.
  */
 
 function Harness(_inputs: Inputs<{}>, ctx: ComponentContext) {
@@ -52,18 +54,24 @@ interface Mounted {
   store: IssueStore;
   service: IssueQueryService;
   palette: PaletteService;
+  /** What was put on the clipboard. */
+  copied: string[];
+  /** The catalog the palette last sent the app worker. */
+  sent: () => readonly CatalogEntry[];
 }
 
 let h: Mounted;
 afterEach(() => {
   h?.ui.unmount();
   h?.served.dispose();
+  vi.unstubAllGlobals();
 });
 
 async function mount(): Promise<void> {
   const store = new IssueStore(seedWorkspace({ issues: 400 }));
   const service = new IssueQueryService(store);
   const palette = new PaletteService(store);
+  const setCatalog = vi.spyOn(palette, 'setCatalog');
   const views = new ViewsStore({ read: async () => ({ outcome: 'ok', value: null }), write: async () => 'ok', remove: async () => 'ok' });
   const served = serveForTest([
     { token: Issues, source: issuesSource(service, store, () => store.reset()) },
@@ -79,7 +87,14 @@ async function mount(): Promise<void> {
   services.register(CommandsService);
   const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1000, height: 700, services });
   ui.runtime.services.get(RouterService).setRoutes({ routes: [route({ path: '/issue/:key', component: Harness })] });
-  h = { ui, served, store, service, palette };
+  // The shell's half of a copy: the browser takes it.
+  const copied: string[] = [];
+  ui.runtime.onShellRequest(request => {
+    if (request.type !== 'clipboard') return;
+    copied.push(request.text);
+    ui.runtime.settleClipboard(request.id, true);
+  });
+  h = { ui, served, store, service, palette, copied, sent: () => setCatalog.mock.lastCall?.[0] ?? [] };
   await settle();
 }
 
@@ -101,7 +116,7 @@ async function type(text: string): Promise<void> {
 }
 
 /** What the palette sent the app worker to match against. */
-const catalog = (): string[] => h.palette.rank('').map(item => item.label);
+const catalog = (): string[] => h.sent().map(entry => entry.label);
 const results = (): string[] => h.palette.results.value.items.map(item => item.label);
 
 describe('the command palette', () => {
@@ -152,5 +167,32 @@ describe('the command palette', () => {
     await press('Escape');
     expect(h.ui.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
     expect(h.store.version.value).toBe(before);
+  });
+
+  it("copies the link of the issue under the list's cursor, and says so", async () => {
+    vi.stubGlobal('location', { origin: 'https://tracker.test' });
+    await mount();
+    await press('j');
+    await press('k', { ctrl: true });
+    await type('copy link');
+    expect(results()[0]).toBe('Copy link');
+    await press('Enter');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await settle();
+    expect(h.copied).toHaveLength(1);
+    const [link] = h.copied;
+    expect(link).toMatch(/^https:\/\/tracker\.test\/issue\/[A-Z]+-\d+$/);
+
+    // Said where a screen reader hears it, and shown.
+    const key = link!.slice(link!.lastIndexOf('/') + 1);
+    const status = h.ui.getByRole('status');
+    expect(h.ui.getSemantics(status).label).toBe(`Copied ${key}'s link`);
+    expect(h.ui.getAllByText(`Copied ${key}'s link`).length).toBeGreaterThan(0);
+
+    // Mod+Shift+C copies the same issue's link, the one Enter opens.
+    await press('C', { ctrl: true, shift: true });
+    expect(h.copied).toEqual([link, link]);
+    await press('Enter');
+    expect(h.ui.runtime.services.get(RouterService).url.value).toBe(`/issue/${key}`);
   });
 });

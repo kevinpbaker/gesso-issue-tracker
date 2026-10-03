@@ -24,7 +24,14 @@ export interface PaletteCommand {
  */
 export class CommandsService {
   readonly open = internalState(false);
+  /**
+   * What the last command had to say, briefly: "Copied WEB-12's link".
+   * The palette shows it and reads it out, wherever the command ran
+   * from. Numbered, so saying the same thing twice says it twice.
+   */
+  readonly notice = internalState<{ readonly text: string; readonly round: number } | null>(null);
   private readonly providers = new Set<() => readonly PaletteCommand[]>();
+  private rounds = 0;
 
   register(provider: () => readonly PaletteCommand[]): () => void {
     this.providers.add(provider);
@@ -33,5 +40,10 @@ export class CommandsService {
 
   commands(): PaletteCommand[] {
     return [...this.providers].flatMap(provider => provider());
+  }
+
+  say(text: string): void {
+    this.rounds += 1;
+    this.notice.value = { text, round: this.rounds };
   }
 }

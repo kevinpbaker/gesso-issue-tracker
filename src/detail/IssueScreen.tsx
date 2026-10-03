@@ -1,15 +1,17 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { autoFocus, breakpoint, percent, type UiChild, type UiNode } from 'gesso-core';
+import { autoFocus, breakpoint, percent, shortcut, type UiChild, type UiNode } from 'gesso-core';
 import { Button, Combobox, DatePicker, Link, Select, type ComboboxOption, type SelectOption } from 'gesso-components';
 import { FocusService, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { NARROW } from '../app/AppShell';
+import { useCopyIssue, type CopyWhat } from '../app/copyIssue';
 import { routeParam } from '../app/params';
+import { ShortcutsService } from '../app/ShortcutsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { CommandsService } from '../palette/CommandsService';
-import { propertyCommands } from '../palette/propertyCommands';
+import { COPY_LINK, copyCommands, propertyCommands } from '../palette/propertyCommands';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
@@ -24,7 +26,8 @@ import { IssueDetailChannel, type IssueDetail, type IssueRef, type LinkKind } fr
  * holds the properties, each a control that saves as it's changed.
  * Below the description: sub-issues, links to other issues, the
  * activity feed with its comments, and a comment box that is the same
- * editor again.
+ * editor again. The sidebar's first row copies the issue's link or its
+ * key, and Mod+Shift+C copies the link from anywhere on the page.
  *
  * The detail channel holds whichever issue was asked for last, so the
  * screen filters it to its own question: an answer for a different key
@@ -72,20 +75,32 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   const open = (key: string): void => router.navigate(`/issue/${key}`);
   const meta = ctx.channel(WorkspaceMeta);
   const commands = ctx.inject(CommandsService);
+  const { registry } = ctx.inject(ShortcutsService);
+  const copyIssue = useCopyIssue(ctx);
+  /** Copies this issue's link or key, as it's called now. */
+  const copy = (what: CopyWhat): void => {
+    const current = inputs.detail.value.issue;
+    if (current !== null) copyIssue(current.key, what);
+  };
   // On an issue's page, the palette changes that issue.
   ctx.onUnmount(
     commands.register(() => {
       const current = inputs.detail.value.issue;
       if (current === null) return [];
-      return propertyCommands({ states: meta.view.states.value, users: meta.view.users.value, labels: meta.view.labels.value }, current.key, {
-        update,
-        addLabel: (labelId, label) => {
-          const now = inputs.detail.value.issue;
-          if (now !== null && !now.labelIds.includes(labelId)) update({ labelIds: [...now.labelIds, labelId] }, label);
-        }
-      });
+      return [
+        ...copyCommands(current.key, copy),
+        ...propertyCommands({ states: meta.view.states.value, users: meta.view.users.value, labels: meta.view.labels.value }, current.key, {
+          update,
+          addLabel: (labelId, label) => {
+            const now = inputs.detail.value.issue;
+            if (now !== null && !now.labelIds.includes(labelId)) update({ labelIds: [...now.labelIds, labelId] }, label);
+          }
+        })
+      ];
     })
   );
+  /** The issue as the page opened it: the body is made again for each one. */
+  const opened = inputs.detail.value.issue;
 
   // The description saves a moment after typing stops, and when focus
   // leaves the editor; whatever is pending goes then, once.
@@ -125,7 +140,10 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
       y="start"
       flexWrap="wrap"
       width={percent(100)}
-      modifiers={[breakpoint({ at: [NARROW], props: { 0: { gap: 16, padding: 16 }, [NARROW]: { gap: 32, padding: 32 } } })]}>
+      modifiers={[
+        breakpoint({ at: [NARROW], props: { 0: { gap: 16, padding: 16 }, [NARROW]: { gap: 32, padding: 32 } } }),
+        shortcut({ registry, keys: 'Mod+Shift+C', label: COPY_LINK, scoped: false, group: opened?.key, run: () => copy('link') })
+      ]}>
       {/* Focus starts here when the issue opens: a screen reader reads the
           issue, single-letter shortcuts still work (it isn't a field), and
           Tab goes on to the title. Not a stop of its own. */}
@@ -168,7 +186,7 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
         <Activity detail={detail} />
         <CommentBox />
       </column>
-      <Properties detail={detail} update={update} />
+      <Properties detail={detail} update={update} copy={copy} />
     </row>
   );
 }
@@ -494,8 +512,11 @@ const ESTIMATES: readonly SelectOption[] = [
   ...[1, 2, 3, 5, 8].map(points => ({ value: String(points), label: `${points} point${points === 1 ? '' : 's'}` }))
 ];
 
-/** The sidebar: every property, each saving as it changes. */
-function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partial<Issue>, label: string) => void }>, ctx: ComponentContext) {
+/** The sidebar: the issue's link and key to copy, then every property, each saving as it changes. */
+function Properties(
+  inputs: Inputs<{ detail: IssueDetail; update: (patch: Partial<Issue>, label: string) => void; copy: (what: CopyWhat) => void }>,
+  ctx: ComponentContext
+) {
   const meta = ctx.channel(WorkspaceMeta);
   const channel = ctx.channel(IssueDetailChannel);
   const search = useIssueSearch(ctx);
@@ -527,6 +548,14 @@ function Properties(inputs: Inputs<{ detail: IssueDetail; update: (patch: Partia
 
   return (
     <column width={280} flexShrink={0} gap={14} padding={16} borderRadius={10} backgroundColor="surface" role="region" label="Properties">
+      <row gap={4} x="end">
+        <Button size="small" variant="plain" label="Copy link" description="Mod+Shift+C" onClick={() => inputs.copy.value('link')}>
+          <text text="Copy link" fontSize={12} color="textMuted" />
+        </Button>
+        <Button size="small" variant="plain" label="Copy key" onClick={() => inputs.copy.value('key')}>
+          <text text="Copy key" fontSize={12} color="textMuted" />
+        </Button>
+      </row>
       {row('Status', <Select label="Status" labelHidden options={states} value={issue.pipe(map(i => i.stateId))} onChange={stateId => update({ stateId }, 'Changed status')} />)}
       {row(
         'Priority',
