@@ -2,6 +2,7 @@ import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map, pairwise, startWith } from 'rxjs/operators';
 
 import { Button } from 'gesso-components';
+import type { UiTheme } from 'gesso-core';
 import { internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { Compose } from '../compose/ComposeContract';
@@ -75,7 +76,7 @@ function doneWhen(ctx: ComponentContext): readonly Observable<boolean>[] {
   ];
 }
 
-export function Tour(_inputs: Inputs<{}>, ctx: ComponentContext) {
+export function Tour(inputs: Inputs<{ theme: UiTheme }>, ctx: ComponentContext) {
   const prefs = ctx.channel(Preferences);
   const step = internalState(0);
   const finish = (): void => prefs.send.setTourDone(true);
@@ -111,12 +112,11 @@ export function Tour(_inputs: Inputs<{}>, ctx: ComponentContext) {
       gap={8}
       padding={16}
       borderRadius={10}
-      // An opaque card with a firm edge, so it reads as sitting on top of
-      // the list rather than as part of it. Not `border`, which in the
-      // light theme is barely off the white page. (No shadow: Gesso's
-      // renderers don't paint `boxShadows` yet.)
+      // An opaque card lifted off the list by the theme's large shadow,
+      // so it reads as floating over the page rather than as part of it.
+      boxShadows={inputs.theme.pipe(map(theme => theme.shadows.large))}
       borderWidth={1}
-      borderColor="controlBorder"
+      borderColor="border"
       backgroundColor="surface"
       role="region"
       label="Tour">

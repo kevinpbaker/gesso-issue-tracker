@@ -4,17 +4,17 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `e73a5fc` (another session's commits are
+per fix, `2c572e3` through `94a9f13` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 47) were checked with their packages'
+build. The ones since (16 to 48) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
-in the same checkout fails the full check for now. After 47, the whole
-test suite passed: 4,675 tests.
+in the same checkout fails the full check for now. After 48, the whole
+test suite passed: 4,690 tests.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -595,6 +595,19 @@ pixels and rasterised differently each frame.
 **Fix:** both renderers draw scrolled content on a whole device pixel;
 the offset keeps its fraction (`e73a5fc`).
 
+### 48. `boxShadows` was never painted
+
+**What:** the prop resolved into the paint state and neither renderer
+drew it, so every theme's shadow scale did nothing. The tour panel used
+a stronger border to stand off the list instead.
+
+**Fix:** both renderers paint shadows as CSS `box-shadow` does: offset,
+blur, spread, colour and `inset`, following the corner radius, with the
+first shadow on top. A shadow's colour may be a palette name. A node is
+culled only once its shadows are off screen too (`94a9f13`). The tour
+panel now takes the theme's `shadows.large`. Checked by parity and
+renderer specs; the WebGPU shader hasn't been compiled on a GPU yet.
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
@@ -628,9 +641,6 @@ the offset keeps its fraction (`e73a5fc`).
 
 ## Still open
 
-- **`boxShadows` is never painted.** Documented as a limit in the
-  renderers' docs; every theme's shadow scale is a no-op. The tracker's
-  tour uses a stronger border instead. Raised as its own task.
 - **Percentage widths going stale in lazy rows.** Seen once in Phase 0
   and never reproduced since. A percentage-width row asked the same
   question after a resize got its old width back, which is exactly the

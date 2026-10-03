@@ -181,7 +181,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
           </row>
         );
       })}
-      <Tour />
+      <Tour theme={theme} />
     </row>
   );
 }

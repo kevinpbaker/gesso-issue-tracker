@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { darkTheme, lightTheme } from 'gesso-core';
 import { createComponent, RouterService, ServiceRegistry, ShellService } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
@@ -134,6 +135,18 @@ it('walks a first visit through the workflow, a step at a time as each is done',
   ui.fireEvent.click(ui.getByRole('button', { name: 'End the tour' }));
   await settle();
   expect(ui.queryByRole('region', { name: 'Tour' })).toBeNull();
+});
+
+it("lifts the tour off the list with the theme's large shadow, in either scheme", async () => {
+  await mount('/team/web/list');
+  const shadows = () => ui.getByRole('region', { name: 'Tour' }).properties.get('boxShadows');
+  const shell = ui.runtime.services.get(ShellService);
+  shell.applyColorScheme('light');
+  await settle();
+  expect(shadows()).toBe(lightTheme.shadows.large);
+  shell.applyColorScheme('dark');
+  await settle();
+  expect(shadows()).toBe(darkTheme.shadows.large);
 });
 
 describe('finishing the tour on its last step', () => {
