@@ -58,22 +58,28 @@ export function IssueScreen(_inputs: Inputs<{}>, ctx: ComponentContext) {
     map(([, answer]) => answer as IssueDetail)
   );
 
+  // A scroll view for each issue, not one for the screen: stepping to
+  // the next issue starts it at its top. A shared one kept the last
+  // issue's offset, so the next was drawn scrolled for a frame and then
+  // jumped as focus was revealed from there.
   return (
-    <scrollview width={percent(100)} height={percent(100)} x="stretch">
+    <box width={percent(100)} height={percent(100)} x="stretch" y="stretch">
       {detail.pipe(
         map(d => (d.issue === null ? 'missing' : d.issue.id)),
         distinctUntilChanged(),
-        map(state =>
-          state === 'missing' ? (
-            <box key="missing" padding={40} width={percent(100)} x="center">
-              <text text="No issue has that key." fontSize={14} color="textMuted" />
-            </box>
-          ) : (
-            <IssueBody key={state} detail={detail} />
-          )
-        )
+        map(state => (
+          <scrollview key={state} width={percent(100)} height={percent(100)} x="stretch">
+            {state === 'missing' ? (
+              <box padding={40} width={percent(100)} x="center">
+                <text text="No issue has that key." fontSize={14} color="textMuted" />
+              </box>
+            ) : (
+              <IssueBody detail={detail} />
+            )}
+          </scrollview>
+        ))
       )}
-    </scrollview>
+    </box>
   );
 }
 
