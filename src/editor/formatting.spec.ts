@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { makeLink, toggleMark, type Mark } from './formatting';
+import { makeLink, MARKERS, toggleMark, type Mark } from './formatting';
 
 describe('toggling a mark', () => {
   it('wraps the selection, keeping it selected', () => {
@@ -21,6 +21,13 @@ describe('toggling a mark', () => {
     expect(toggleMark('ab', 1, 1, 'code')).toEqual({ text: 'a``b', start: 2, end: 2 });
   });
 
+  it('does not read markers around nothing but spaces as a mark', () => {
+    // Found by the property below: `_    _` isn't italic, so it gets marked rather than unmarked.
+    const once = toggleMark('_    _', 0, 6, 'italic');
+    expect(once.text).toBe('__    __');
+    expect(toggleMark(once.text, once.start, once.end, 'italic').text).toBe('_    _');
+  });
+
   it('comes back to where it started when toggled twice', () => {
     const marks: Mark[] = ['bold', 'italic', 'code', 'strike'];
     fc.assert(
@@ -30,10 +37,17 @@ describe('toggling a mark', () => {
         if (/^\s|\s$/.test(text.slice(start, end))) {
           return;
         }
+        // A run of the marker's character longer than the marker reads
+        // more than one way (`__!__` is bold, and also italic around
+        // `_!_`), so toggling it can't come back to where it started.
+        if (text.includes(MARKERS[mark] + MARKERS[mark][0])) {
+          return;
+        }
         const once = toggleMark(text, start, end, mark);
         const twice = toggleMark(once.text, once.start, once.end, mark);
         expect(twice.text).toBe(text);
-      })
+      }),
+      { numRuns: 5000 }
     );
   });
 });

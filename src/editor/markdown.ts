@@ -188,12 +188,33 @@ function raw(node: Content, markdown: string, spans: Span[]): void {
   spans.push({ block: { type: 'raw', text: markdown.slice(start, end) }, start, end });
 }
 
-/** The inline source of a block's phrasing content: from its first child to its last. */
-function inlineSource(children: readonly Content[], markdown: string): string {
+/**
+ * The inline source of a heading: from its first child to its last.
+ *
+ * Children don't always say where they came from: GFM's autolink
+ * literals make link nodes with no position (`# a\\@a.a` reads as the
+ * email `a@a.a`, a link that was never written). Then the source is the
+ * heading's own, without its markers: the `#`s of an ATX heading, the
+ * underline of a setext one.
+ */
+function inlineSource(heading: Content & { children: readonly Content[] }, markdown: string, setext: boolean): string {
+  const children = heading.children;
   if (children.length === 0) {
     return '';
   }
-  return markdown.slice(offsets(children[0]!)[0], offsets(children[children.length - 1]!)[1]);
+  if (children.every(child => child.position?.start.offset !== undefined && child.position?.end.offset !== undefined)) {
+    return markdown.slice(offsets(children[0]!)[0], offsets(children[children.length - 1]!)[1]);
+  }
+  const [start, end] = offsets(heading);
+  const source = markdown.slice(start, end);
+  if (setext) {
+    const lines = source.split('\n').slice(0, -1);
+    return lines.map((line, index) => (index === 0 ? line.trimStart() : line)).join('\n').trimEnd();
+  }
+  return source
+    .replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, '')
+    .replace(/(?:^|[ \t]+)#+[ \t]*$/, '')
+    .trim();
 }
 
 function flatten(node: Content, markdown: string, spans: Span[], depth: number): void {
@@ -208,7 +229,7 @@ function flatten(node: Content, markdown: string, spans: Span[], depth: number):
         block: {
           type: 'heading',
           level: node.depth,
-          text: inlineSource(node.children, markdown),
+          text: inlineSource(node, markdown, setext),
           ...(setext ? { setext: true } : {})
         },
         start,
@@ -581,21 +602,29 @@ function write(current: Block, counters: readonly (number | undefined)[], column
  * a fence. Patterns over-escaped all three.
  */
 function escapeLines(text: string): string {
-  return text
-    .split('\n')
-    .map((line, index) => escapeLine(line, index === 0))
-    .join('\n');
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    out.push(escapeLine(line, out.length === 0 ? null : out.join('\n')));
+  }
+  return out.join('\n');
 }
 
 const OPTIONS = { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] };
 const breaks = new Map<string, boolean>();
 
-/** Whether a line, at the top of a paragraph or continuing one, is read as something other than its text. */
-function breaksParagraph(line: string, first: boolean): boolean {
-  const key = `${first ? 1 : 0}${line}`;
+/**
+ * Whether a line, at the top of a paragraph (`before` null) or after
+ * the lines of it written so far, is read as something other than text.
+ *
+ * Asked after what's really above it, not a stand-in: `-|-` after plain
+ * text is text, and after `a|a` it's a table's delimiter row; `+` on its
+ * own is a list item, and after a line of text it's text.
+ */
+function breaksParagraph(line: string, before: string | null): boolean {
+  const key = before === null ? `1${line}` : `0${before}\n${line}`;
   let answer = breaks.get(key);
   if (answer === undefined) {
-    const tree = fromMarkdown(first ? line : `a\n${line}`, OPTIONS);
+    const tree = fromMarkdown(before === null ? line : `${before}\n${line}`, OPTIONS);
     answer = !(tree.children.length === 1 && tree.children[0]!.type === 'paragraph');
     if (breaks.size > 2000) {
       breaks.clear();
@@ -622,14 +651,14 @@ function readsAsItem(written: string, task: boolean): boolean {
   return answer;
 }
 
-function escapeLine(line: string, first: boolean): string {
-  if (line.trim() === '' || !breaksParagraph(line, first)) {
+function escapeLine(line: string, before: string | null): string {
+  if (line.trim() === '' || !breaksParagraph(line, before)) {
     return line;
   }
   const at = line.search(/\S/);
   const ordered = /^(\d{1,9})([.)])/.exec(line.slice(at));
   const escaped = ordered !== null ? `${line.slice(0, at)}${ordered[1]}\\${line.slice(at + ordered[1]!.length)}` : `${line.slice(0, at)}\\${line.slice(at)}`;
-  return breaksParagraph(escaped, first) ? line : escaped;
+  return breaksParagraph(escaped, before) ? line : escaped;
 }
 
 // ---------------------------------------------------------------------------

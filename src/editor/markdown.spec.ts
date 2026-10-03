@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { seedWorkspace } from '../model/seed';
 import { covers, inlineRuns } from './inline';
-import { block, inputRule, parse, serialize, type Block } from './markdown';
+import { block, detached, inputRule, parse, serialize, type Block } from './markdown';
 
 const shape = (blocks: readonly Block[]) => blocks.map(({ id: _id, src: _src, column: _column, ...rest }) => rest);
 
@@ -195,5 +195,38 @@ describe('carets between blocks and their markdown', () => {
     const task = blocks.find(b => b.type === 'task')!;
     const at = caretToSource(blocks, markdown, { id: task.id, offset: 4 });
     expect(markdown.text.slice(at, at + 3)).toBe(' on');
+  });
+});
+
+/**
+ * Found by the property spec: GFM reads `a\\@a.a` as the email autolink
+ * `a@a.a`, and the link node it makes has no position, which parse
+ * relied on for a heading's text.
+ */
+describe('a heading whose inline nodes carry no position', () => {
+  it('reads its text from the heading itself, and writes it back', () => {
+    for (const md of ['# a\\@a.a', '## see a\\@b.c now ##', 'a\\@a.a\n===']) {
+      const blocks = parse(md);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]!.type).toBe('heading');
+      expect(serialize(blocks)).toBe(md);
+      const fresh = serialize(blocks.map(detached));
+      expect(serialize(parse(fresh).map(detached))).toBe(fresh);
+    }
+    expect(parse('# a\\@a.a')[0]!.text).toBe('a\\@a.a');
+    expect(parse('## see a\\@b.c now ##')[0]!.text).toBe('see a\\@b.c now');
+  });
+});
+
+/** Found by the property spec: block text whose lines spell a table. */
+describe('text that would read as a table', () => {
+  it('is escaped so it reads back as the text it was', () => {
+    for (const current of [block('paragraph', 'a|a\n-|-\na'), { ...block('bullet', 'a|a\n-|-\na'), indent: 0, marker: '-' }]) {
+      const written = serialize([current]);
+      const back = parse(written);
+      expect(back).toHaveLength(1);
+      expect(back[0]!.type).toBe(current.type);
+      expect(serialize(back.map(detached))).toBe(written);
+    }
   });
 });

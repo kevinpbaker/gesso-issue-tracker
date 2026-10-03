@@ -43,9 +43,17 @@ export function toggleMark(text: string, start: number, end: number, mark: Mark)
   const rightOutside = text.slice(end, end + m) === marker;
   const leftInside = !leftOutside && inner.startsWith(marker);
   const rightInside = !rightOutside && inner.length >= (leftInside ? 2 * m : m) && inner.endsWith(marker);
-  if ((leftOutside || leftInside) && (rightOutside || rightInside)) {
-    const left = leftOutside ? start - m : start;
-    const right = rightOutside ? end : end - m;
+  const left = leftOutside ? start - m : start;
+  const right = rightOutside ? end : end - m;
+  // Markers only mark what reads as marked: emphasis and strikethrough
+  // need text that doesn't start or end with a space (`_  _` is two
+  // underscores, not italic), as the inline styling has it. An empty
+  // pair with the caret between is the pair a toggle just made, ready to
+  // type into, and toggling again takes it away.
+  const between = text.slice(left + m, right);
+  const reads =
+    between === '' ? start === end : mark === 'code' || !/^\s|\s$/.test(between);
+  if ((leftOutside || leftInside) && (rightOutside || rightInside) && reads) {
     return {
       text: text.slice(0, left) + text.slice(left + m, right) + text.slice(right + m),
       start: left,
