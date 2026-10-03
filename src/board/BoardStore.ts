@@ -154,6 +154,7 @@ export function createBoardStore(store: IssueStore) {
       key: issue.key,
       title: issue.title,
       priority: issue.priority,
+      assigneeId: issue.assigneeId,
       initials: issue.assigneeId === null ? '' : (initials.get(issue.assigneeId) ?? ''),
       labels: issue.labelIds.map(labelId => labelNames.get(labelId) ?? labelId)
     };

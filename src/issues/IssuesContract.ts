@@ -1,6 +1,6 @@
 import { channel } from 'gesso-framework';
 
-import type { Issue } from '../model/types';
+import type { Issue, Priority } from '../model/types';
 import type { IssueQuery, QueryGroup } from '../model/query';
 
 /**
@@ -44,6 +44,24 @@ export interface IssuesSummary {
   readonly queryMs: number;
 }
 
+/**
+ * One property set on some issues from the keyboard: a status, a
+ * priority, an assignee (null for nobody), or a label, which comes off
+ * when every one of them has it and goes on otherwise.
+ */
+export type TriageChange =
+  | { readonly field: 'state'; readonly stateId: string }
+  | { readonly field: 'priority'; readonly priority: Priority }
+  | { readonly field: 'assignee'; readonly assigneeId: string | null }
+  | { readonly field: 'label'; readonly labelId: string };
+
+/** The last step through the history, for the undo toast. `serial` tells two steps with the same label apart. */
+export interface ChangeNotice {
+  readonly serial: number;
+  readonly kind: 'do' | 'undo' | 'redo';
+  readonly label: string;
+}
+
 export interface IssuesView {
   query: IssueQuery;
   summary: IssuesSummary;
@@ -54,6 +72,8 @@ export interface IssuesView {
   /** How many issues are selected in all, on screen or not. */
   selectedCount: number;
   undoLabel: string | null;
+  /** What was last done, undone or redone, anywhere in the app; null after a reset, and for typing. */
+  lastChange: ChangeNotice | null;
 }
 
 /** Inclusive ranges of positions in the current result, `[[0, 4], [9, 9]]`. */
@@ -77,6 +97,11 @@ export type IssuesCommands = {
   updateSelected(request: { readonly patch: Partial<Issue>; readonly label: string }): void;
   /** Adds a label to every selected issue, keeping the labels each already has. */
   addLabelToSelected(request: { readonly labelId: string; readonly label: string }): void;
+  /**
+   * One property to some issues (the selection, without `ids`) as one
+   * transaction, named by the app worker: "Moved 12 issues to Done".
+   */
+  triage(request: { readonly ids?: readonly string[]; readonly change: TriageChange }): void;
   undo(): void;
   redo(): void;
   reset(): void;
@@ -89,5 +114,6 @@ export const Issues = channel<IssuesView, IssuesCommands>('issues', {
   rows: {},
   selected: {},
   selectedCount: 0,
-  undoLabel: null
+  undoLabel: null,
+  lastChange: null
 });

@@ -65,7 +65,8 @@ export class ComposeService {
       assigneeId: draft.assigneeId === '' ? null : draft.assigneeId,
       labelIds: draft.labelIds
     });
-    this.issues.create(issue, this.me);
+    // Named as the dialog names it, which is what the undo notice says.
+    this.issues.create(issue, this.me, `Filed ${issue.key}: ${title}`);
     this.serial += 1;
     this.filed.next({ key: issue.key, title, serial: this.serial });
     // What's kept for the next one: with "Create more", every choice

@@ -18,7 +18,8 @@ export function issuesSource(
       rows: service.rows,
       selected: service.selected,
       selectedCount: service.selectedCount,
-      undoLabel: service.undoLabel
+      undoLabel: service.undoLabel,
+      lastChange: service.lastChange
     },
     commands: {
       setQuery: query => service.setQuery(query),
@@ -28,6 +29,7 @@ export function issuesSource(
       clearSelection: () => service.clearSelection(),
       updateSelected: ({ patch, label }) => service.updateSelected(patch, label),
       addLabelToSelected: ({ labelId, label }) => service.addLabelToSelected(labelId, label),
+      triage: ({ ids, change }) => service.triage(ids, change),
       undo: () => void store.undo(),
       redo: () => void store.redo(),
       reset

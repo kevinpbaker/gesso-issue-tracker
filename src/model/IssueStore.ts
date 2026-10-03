@@ -22,6 +22,21 @@ export type Change =
   | { readonly kind: 'relate'; readonly relation: IssueRelation }
   | { readonly kind: 'unrelate'; readonly relation: IssueRelation };
 
+/**
+ * A step through the history: something done, undone or redone. What a
+ * toast says after each, and whether it offers Undo or Redo.
+ */
+export interface HistoryStep {
+  readonly kind: 'do' | 'undo' | 'redo';
+  /** The transaction's label: what was done, or what was undone. */
+  readonly label: string;
+  /**
+   * Part of a run of edits to one text, saved at each pause in typing:
+   * a description being written. Not worth a notice each time.
+   */
+  readonly typing: boolean;
+}
+
 export interface Transaction {
   readonly id: number;
   readonly label: string;
@@ -87,6 +102,8 @@ export class IssueStore {
   readonly version = new BehaviorSubject(0);
   /** Everything was replaced at once, by an overlay import or a reset, with no transaction to describe it. */
   readonly reloaded = new Subject<void>();
+  /** Every commit, undo and redo, after `changes` has heard it. */
+  readonly history = new Subject<HistoryStep>();
 
   constructor(
     readonly workspace: Workspace,
@@ -230,6 +247,14 @@ export class IssueStore {
    * left out, and a patch that changes nothing commits nothing.
    */
   update(ids: readonly string[], patch: Partial<Issue>, label: string, actorId = 'u0'): Transaction | null {
+    return this.updateEach(ids, () => patch, label, actorId);
+  }
+
+  /**
+   * `update` with a patch worked out for each issue from what it is now:
+   * a label added to issues that each have their own labels already.
+   */
+  updateEach(ids: readonly string[], patchOf: (issue: Issue) => Partial<Issue>, label: string, actorId = 'u0'): Transaction | null {
     const changes: Change[] = [];
     const at = this.clock();
     for (const id of ids) {
@@ -239,7 +264,7 @@ export class IssueStore {
       }
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
-      for (const [field, value] of Object.entries(patch) as [keyof Issue, unknown][]) {
+      for (const [field, value] of Object.entries(patchOf(issue)) as [keyof Issue, unknown][]) {
         if (!sameValue(issue[field], value)) {
           before[field] = issue[field];
           after[field] = value;
@@ -283,8 +308,8 @@ export class IssueStore {
     };
   }
 
-  create(issue: Issue, actorId = 'u0'): Transaction {
-    return this.commit(`Created ${issue.key}`, [{ kind: 'create', issue }], actorId);
+  create(issue: Issue, actorId = 'u0', label = `Created ${issue.key}`): Transaction {
+    return this.commit(label, [{ kind: 'create', issue }], actorId);
   }
 
   comment(comment: Comment): Transaction {
@@ -315,6 +340,7 @@ export class IssueStore {
     this.apply(transaction, true);
     this.undoStack.push(transaction);
     this.redoStack.length = 0;
+    this.history.next(step('do', transaction));
     return transaction;
   }
 
@@ -326,6 +352,7 @@ export class IssueStore {
     const inverse = this.transaction(`Undo ${done.label}`, done.changes.map(invert).reverse(), done.actorId);
     this.apply(inverse, false);
     this.redoStack.push(done);
+    this.history.next(step('undo', done));
     return inverse;
   }
 
@@ -337,6 +364,7 @@ export class IssueStore {
     const again = this.transaction(undone.label, undone.changes, undone.actorId);
     this.apply(again, false);
     this.undoStack.push(undone);
+    this.history.next(step('redo', undone));
     return again;
   }
 
@@ -556,6 +584,17 @@ export class IssueStore {
     this.reloaded.next();
     this.version.next(this.version.value + 1);
   }
+}
+
+function step(kind: HistoryStep['kind'], transaction: Transaction): HistoryStep {
+  // Only a run field changed, and bookkeeping: a reorder, which changes
+  // only bookkeeping, is still something someone did.
+  const typing = transaction.changes.every(change => {
+    if (change.kind !== 'update') return false;
+    const fields = (Object.keys(change.after) as (keyof Issue)[]).filter(field => !QUIET.has(field));
+    return fields.length > 0 && fields.every(field => RUNS.has(field));
+  });
+  return { kind, label: transaction.label, typing: transaction.changes.length > 0 && typing };
 }
 
 function invert(change: Change): Change {

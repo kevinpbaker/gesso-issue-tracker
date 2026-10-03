@@ -1,6 +1,7 @@
 import { BehaviorSubject, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+import { labelFor } from '../issues/triage';
 import type { IssueStore } from '../model/IssueStore';
 import { PRIORITY_NAMES, type ActivityEvent, type FieldChange, type Issue, type IssueRelation, type Priority } from '../model/types';
 import type { IssueDetail, IssueRef, LinkKind, LinkRow } from './IssueDetailContract';
@@ -43,10 +44,15 @@ export class IssueDetailService {
     this.asked.next(key);
   }
 
+  /**
+   * `label` names the change unless it's a status, priority, assignee or
+   * label, which are named as the list's triage keys name them ("Moved
+   * WEB-12 to Done"), so the undo toast says the same from either place.
+   */
   update(patch: Parameters<IssueStore['update']>[1], label: string): void {
     const issue = this.current();
     if (issue !== undefined) {
-      this.store.update([issue.id], patch, label, this.me);
+      this.store.update([issue.id], patch, labelFor(this.store, [issue.id], patch, label), this.me);
     }
   }
 

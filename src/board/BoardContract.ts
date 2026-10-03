@@ -21,6 +21,7 @@ export interface CardRow {
   readonly key: string;
   readonly title: string;
   readonly priority: number;
+  readonly assigneeId: string | null;
   /** Two letters, or '' when unassigned. */
   readonly initials: string;
   readonly labels: readonly string[];

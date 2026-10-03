@@ -1,11 +1,12 @@
-import { BehaviorSubject, combineLatest } from 'rxjs';
-import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
+import { BehaviorSubject, combineLatest, merge } from 'rxjs';
+import { distinctUntilChanged, filter, map, scan, shareReplay, startWith } from 'rxjs/operators';
 
 import type { IssueStore } from '../model/IssueStore';
 import { DEFAULT_QUERY, runQuery, type IssueQuery, type QueryResult } from '../model/query';
 import type { SearchIndex } from '../search/SearchIndex';
 import type { Issue } from '../model/types';
-import type { IssueRow, IssuesSummary } from './IssuesContract';
+import type { ChangeNotice, IssueRow, IssuesSummary, TriageChange } from './IssuesContract';
+import { labelFor, triage } from './triage';
 
 /**
  * One list's view of the workspace: a query, a window, and the rows in it.
@@ -38,6 +39,7 @@ export class IssueQueryService {
   readonly window;
   readonly rows;
   readonly undoLabel;
+  readonly lastChange;
   readonly selected;
   readonly selectedCount;
 
@@ -132,6 +134,16 @@ export class IssueQueryService {
       map(() => store.undoLabel),
       distinctUntilChanged()
     );
+
+    // Typing in a description saves at every pause, and a notice each
+    // time would be noise; a reset leaves nothing to undo.
+    this.lastChange = merge(
+      store.history.pipe(filter(step => !step.typing)),
+      store.reloaded.pipe(map(() => null))
+    ).pipe(
+      scan((last: ChangeNotice | null, step): ChangeNotice | null => (step === null ? null : { serial: (last?.serial ?? 0) + 1, kind: step.kind, label: step.label }), null),
+      startWith(null)
+    );
   }
 
   setQuery(query: IssueQuery): void {
@@ -165,8 +177,10 @@ export class IssueQueryService {
     return [...this.selection.value];
   }
 
+  /** Named as the triage keys name it when it's one of their properties: "Moved 3 issues to Done". */
   updateSelected(patch: Partial<Issue>, label: string): void {
-    this.store.update(this.selectedIds(), patch, label);
+    const ids = this.selectedIds();
+    this.store.update(ids, patch, labelFor(this.store, ids, patch, label));
   }
 
   addLabelToSelected(labelId: string, label: string): void {
@@ -176,6 +190,11 @@ export class IssueQueryService {
       return [{ kind: 'update' as const, id, before: { labelIds: issue.labelIds }, after: { labelIds: [...issue.labelIds, labelId] } }];
     });
     if (changes.length > 0) this.store.commit(label, changes);
+  }
+
+  /** One property to some issues, or to the selection without `ids`. */
+  triage(ids: readonly string[] | undefined, change: TriageChange): void {
+    triage(this.store, ids ?? this.selectedIds(), change);
   }
 
   setWindow(range: { readonly start: number; readonly end: number }): void {
