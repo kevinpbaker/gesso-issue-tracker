@@ -130,4 +130,31 @@ describe('the board for a screen reader', () => {
     expect(h.ui.getSemantics(board).description).toContain('Space picks a card up');
     expect(h.ui.getAllByRole('list').length).toBeGreaterThanOrEqual(5);
   });
+
+  it('starts a drag where the column was scrolled to, without jumping back to the cursor', async () => {
+    await mount();
+    const column = h.ui.getAllByRole('list')[0]!;
+    const box = h.ui.getVisibleBox(column);
+    h.ui.fireEvent.wheel({ x: box.x + box.width / 2, y: box.y + 200, deltaY: 1500 });
+    await settle();
+    await settle();
+    // A card on screen, well down the column, where the cursor isn't.
+    const card = h.ui
+      .getAllByRole('listitem')
+      .filter(node => node.parent !== null && h.ui.getVisibleBox(node).y > box.y && h.ui.getVisibleBox(node).y + 100 < box.y + box.height)
+      .find(node => { let at = node.parent; while (at !== null && at !== column) at = at.parent; return at === column; })!;
+    const before = h.ui.getVisibleBox(card);
+    const name = h.ui.getSemantics(card).label;
+    const x = before.x + before.width / 2;
+    const y = before.y + before.height / 2;
+    h.ui.fireEvent.pointerDown(x, y);
+    for (let step = 1; step <= 6; step++) {
+      h.ui.fireEvent.pointerMove(x + step * 60, y);
+      await settle();
+    }
+    // Still where it was pressed: the column didn't scroll back to its top.
+    expect(h.ui.getVisibleBox(h.ui.getByRole('listitem', { name: name! })).y).toBe(before.y);
+    h.ui.fireEvent.pointerUp(x + 360, y);
+    await settle();
+  });
 });

@@ -111,6 +111,21 @@ it('raises the contrast without moving anything', async () => {
   expect({ bar: bar(), list: list() }).toEqual(before);
 });
 
+it('lays a list scroll out from the list, not from the shell', async () => {
+  await mount('/team/web/list');
+  const list = ui.getByRole('listbox', { name: 'Issues' });
+  // A row mounting as the list scrolls changes nothing outside the
+  // list's column: the regions above it all fill what's left.
+  expect(ui.explainText(list)).toMatch(/relayout: boundary · content stays inside .*\(1 level up\)/);
+});
+
+it('opens an issue at its top, though the issue has the focus', async () => {
+  await mount('/issue/WEB-12');
+  const title = ui.getVisibleBox(ui.getByRole('textbox', { name: 'Title' }));
+  expect(title.y).toBeGreaterThan(0);
+  expect(title.y).toBeLessThan(200);
+});
+
 describe('at 320 CSS pixels, a window zoomed to 400%', () => {
   it('gives the page the whole width, with the sidebar a button away', async () => {
     await mount('/team/web/list', 320, 256);

@@ -149,14 +149,14 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         narrowNow.next(narrow);
         if (narrow) {
           return (
-            <row key="narrow" flexGrow={1} minWidth={0} y="stretch">
+            <row key="narrow" flexGrow={1} flexBasis={0} minWidth={0} y="stretch">
               {drawer.pipe(map(open => (open ? <Sidebar key="drawer" onClose={closeDrawer} /> : main)))}
             </row>
           );
         }
         closeDrawer();
         return (
-          <row key="wide" flexGrow={1} minWidth={0} y="stretch">
+          <row key="wide" flexGrow={1} flexBasis={0} minWidth={0} y="stretch">
             {prefs.view.sidebarOpen.pipe(
               map(open =>
                 open ? (

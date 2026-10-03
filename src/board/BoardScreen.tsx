@@ -359,10 +359,17 @@ function Cell(inputs: Inputs<{ lane: string; stateId: string; height: number | n
     if (top < scrollY.value) scrollY.value = top;
     else if (top + CARD > scrollY.value + height) scrollY.value = top + CARD - height;
   };
-  ctx.effect(combineLatest([state.cursor, state.hint]), ([cursor, hint]) => {
-    const target = hint ?? cursor;
-    if (target !== null && target.lane === lane && target.stateId === stateId) reveal(target.index);
-  });
+  // Each when it moves, and only then: revealing `hint ?? cursor` on
+  // every change of either brought the cursor back into view whenever a
+  // drag's hint came or went, which scrolled a column to its top under
+  // the pointer as a drag started in it.
+  const sameSpot = (a: Spot | null, b: Spot | null) =>
+    a === b || (a !== null && b !== null && a.lane === b.lane && a.stateId === b.stateId && a.index === b.index);
+  const revealHere = (spot: Spot | null): void => {
+    if (spot !== null && spot.lane === lane && spot.stateId === stateId) reveal(spot.index);
+  };
+  ctx.effect(state.cursor.pipe(distinctUntilChanged(sameSpot)), revealHere);
+  ctx.effect(state.hint.pipe(distinctUntilChanged(sameSpot)), revealHere);
 
   let total = 0;
   ctx.effect(count, value => (total = value));
@@ -489,6 +496,11 @@ function Card(
           state.cardsChanged.value += 1;
         }}
         label={field(row => `${row.key} ${row.title}`, 'Loading card')}
+        // The cursor goes to the card pressed, before the press gives the
+        // board focus: a board focused with no cursor puts it on the first
+        // card and scrolls that column to its top, out from under the
+        // pointer and whatever drag it was starting.
+        onPointerDown={() => (state.cursor.value = { lane, stateId, index })}
         onClick={() => {
           const row = board.view.slots.value[key];
           if (row !== undefined) router.navigate(`/issue/${row.key}`);
