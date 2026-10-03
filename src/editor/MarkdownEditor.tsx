@@ -1,13 +1,24 @@
 import { Subject, type Observable } from 'rxjs';
 import { distinctUntilChanged, filter, map, shareReplay, startWith } from 'rxjs/operators';
 
-import { defineModifier, editorFor, percent, type UiBeforeInputEvent, type UiKeyboardEvent, type UiModifierHost } from 'gesso-core';
+import {
+  defineModifier,
+  editorFor,
+  percent,
+  type UiBeforeInputEvent,
+  type UiEditingGroup,
+  type UiGroupEdit,
+  type UiKeyboardEvent,
+  type UiModifierHost,
+  type UiNode,
+  type UiTextPosition
+} from 'gesso-core';
 import { internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { chunk } from './chunks';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
 import { inlineRuns } from './inline';
-import { block, continuation, inputRule, isList, parse, serialize, type Block } from './markdown';
+import { block, continuation, detached, inputRule, isList, parse, serialize, type Block } from './markdown';
 
 /**
  * A rich text editor for markdown, drawn by Gesso.
@@ -71,9 +82,12 @@ class FocusRequests {
   }
 }
 
-const focusRequests = defineModifier<{ id: string; requests: FocusRequests }>({
+const focusRequests = defineModifier<{ id: string; requests: FocusRequests; fields: WeakMap<UiNode, string> }>({
   name: 'focusRequests',
   attach(host: UiModifierHost, args) {
+    // Which block a field is, for edits over a selection that spans
+    // fields: Gesso reports those by node.
+    args.fields.set(host.node, args.id);
     const apply = (): void => {
       const request = args.requests.take(args.id);
       if (request === null) {
@@ -99,7 +113,6 @@ interface BlockHandlers {
   backspaceAtStart(id: string): void;
   indent(id: string, by: 1 | -1, caret: number): boolean;
   toggle(id: string): void;
-  step(id: string, direction: 1 | -1, caret: number): boolean;
   undo(): void;
   redo(): void;
   /** The caret moved by itself: the next character starts a new undo step. */
@@ -112,12 +125,14 @@ interface Context {
   readonly numberOf: (id: string) => Observable<number>;
   readonly requests: FocusRequests;
   readonly handlers: BlockHandlers;
+  readonly fields: WeakMap<UiNode, string>;
 }
 
 export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: ComponentContext) {
   const blocks = internalState<readonly Block[]>(parse(inputs.value.value));
   const history = new DocumentHistory();
   const requests = new FocusRequests();
+  const fields = new WeakMap<UiNode, string>();
 
   // Everything the views read, worked out from one document state at a
   // time. Separate streams over \`blocks\` update in subscription order,
@@ -281,16 +296,6 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const current = blocks.value[index]!;
       commit(replaced(index, [{ ...current, checked: current.checked !== true }]), null, 'format', { blocks: blocks.value, caret: null });
     },
-    step(id, direction, caret) {
-      const index = indexOf(id);
-      const target = blocks.value[index + direction];
-      if (target === undefined) {
-        return false;
-      }
-      history.breakRun();
-      focus(target.id, direction < 0 ? target.text.length : Math.min(caret, target.text.length));
-      return true;
-    },
     undo: () => restore(history.undo()),
     redo: () => restore(history.redo()),
     moved: () => history.breakRun()
@@ -302,7 +307,61 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     ctx.effect(blocks.pipe(map(list => serialize(list)), distinctUntilChanged()), markdown => inputs.onChange.value?.(markdown));
   }
 
-  const context: Context = { cellFor, numberOf, requests, handlers };
+  /** Where a position Gesso reports is, in the document. */
+  const locate = (position: UiTextPosition): { index: number; offset: number } | null => {
+    const id = fields.get(position.node);
+    const index = id === undefined ? -1 : indexOf(id);
+    return index < 0 ? null : { index, offset: position.offset };
+  };
+
+  // The blocks select as one text. An edit over a selection that spans
+  // blocks joins what is left of the first to what is left of the last,
+  // as a document editor does: the result keeps the first block's type.
+  const group: UiEditingGroup = {
+    onEdit(edit: UiGroupEdit) {
+      const start = locate(edit.start);
+      const end = locate(edit.end);
+      if (start === null || end === null) {
+        return;
+      }
+      const list = blocks.value;
+      const first = list[start.index]!;
+      const last = list[end.index]!;
+      const head = first.text.slice(0, start.offset);
+      const tail = last.text.slice(end.offset);
+      const before = here(first.id, start.offset);
+      const count = end.index - start.index + 1;
+      if (edit.inputType === 'insertParagraph' || edit.inputType === 'insertLineBreak') {
+        const after = block(continuation(first).type, tail, { ...continuation(first), loose: first.loose });
+        commit(replaced(start.index, [{ ...first, text: head }, after], count), { id: after.id, offset: 0 }, 'structure', before);
+        return;
+      }
+      const inserted = edit.inputType.startsWith('delete') ? '' : (edit.data ?? '');
+      commit(
+        replaced(start.index, [{ ...first, text: head + inserted + tail }], count),
+        { id: first.id, offset: head.length + inserted.length },
+        'structure',
+        before
+      );
+    },
+    // Copied as markdown: the selected part of each block, written as
+    // the blocks they are.
+    copyText(startPosition, endPosition) {
+      const start = locate(startPosition);
+      const end = locate(endPosition);
+      if (start === null || end === null) {
+        return '';
+      }
+      const picked = blocks.value.slice(start.index, end.index + 1).map((current, i, all) => {
+        const from = i === 0 ? start.offset : 0;
+        const to = i === all.length - 1 ? end.offset : current.text.length;
+        return detached({ ...current, text: current.text.slice(from, to) });
+      });
+      return serialize(picked);
+    }
+  };
+
+  const context: Context = { cellFor, numberOf, requests, handlers, fields };
 
   const editor = (
     <scrollview
@@ -314,7 +373,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       borderColor="border"
       role="region"
       label={inputs.label.value ?? 'Document'}>
-      <column gap={6} padding={20} width={percent(100)}>
+      <column gap={6} padding={20} width={percent(100)} editingGroup={group}>
         {chunkKeys.pipe(
           map(keys =>
             keys.map(start => (
@@ -382,7 +441,7 @@ const HEADING_SIZES = [26, 21, 18, 16, 15, 14];
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 function BlockView(inputs: Inputs<{ block: Block; number: number; context: Context }>, _ctx: ComponentContext) {
-  const { requests, handlers } = inputs.context.value;
+  const { requests, handlers, fields } = inputs.context.value;
   const current = inputs.block;
 
   const id = current.value.id;
@@ -401,7 +460,6 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     }
     const model = editorFor(event.currentTarget);
     const caret = model.collapsed ? model.focus : -1;
-    const length = model.text.length;
     const { shift, meta, ctrl } = event.modifiers;
     const command = meta || ctrl;
     if (command && (event.key === 'z' || event.key === 'Z')) {
@@ -420,11 +478,8 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       event.preventDefault();
     } else if (event.key === 'Tab' && handlers.indent(id, shift ? -1 : 1, Math.max(0, caret))) {
       event.preventDefault();
-    } else if (event.key === 'ArrowUp' && caret === 0 && handlers.step(id, -1, caret)) {
-      event.preventDefault();
-    } else if (event.key === 'ArrowDown' && caret === length && handlers.step(id, 1, 0)) {
-      event.preventDefault();
     } else if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+      // Moving between blocks is Gesso's: the blocks are an editing group.
       handlers.moved();
     }
   };
@@ -460,7 +515,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}
       onInput={event => handlers.input(id, event.value, event.selectionEnd)}
-      modifiers={[focusRequests({ id, requests })]}
+      modifiers={[focusRequests({ id, requests, fields })]}
     />
   );
 

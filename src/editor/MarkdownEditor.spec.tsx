@@ -201,6 +201,55 @@ describe('the markdown editor', () => {
   });
 });
 
+describe('a selection across blocks', () => {
+  it('replaces what it covers with what is typed, keeping the first block', async () => {
+    await mount('# Title\n\nfirst paragraph\n\n- item');
+    await caretIn('Heading level 1', 0, 2);
+    await press('ArrowDown', { shift: true });
+    await press('ArrowDown', { shift: true });
+    await press('End', { shift: true });
+    await type('X');
+    expect(source()).toBe('# TiX');
+  });
+
+  it('joins on Backspace and splits on Enter, each one undo step', async () => {
+    await mount('one two\n\nthree four');
+    await caretIn('Paragraph', 0, 3);
+    // Down keeps the column: from after "one" to after "thr".
+    await press('ArrowDown', { shift: true });
+    await press('Backspace');
+    expect(source()).toBe('oneee four');
+    await press('z', { meta: true });
+    expect(source()).toBe('one two\n\nthree four');
+    await caretIn('Paragraph', 0, 3);
+    await press('ArrowDown', { shift: true });
+    await press('Enter');
+    expect(source()).toBe('one\n\nee four');
+  });
+
+  it('copies as markdown', async () => {
+    await mount('## Steps\n\n1. first\n2. second');
+    await caretIn('Heading level 2', 0, 0);
+    await press('ArrowDown', { shift: true });
+    await press('ArrowDown', { shift: true });
+    await press('End', { shift: true });
+    expect(ui.runtime.editingState?.text).toBe('## Steps\n\n1. first\n2. second');
+  });
+
+  it('moves between blocks with the arrows', async () => {
+    await mount('one\n\ntwo');
+    await caretIn('Paragraph', 0, 'end');
+    // Down keeps the column, and "two" is as long as "one".
+    await press('ArrowDown');
+    await type('!');
+    expect(source()).toBe('one\n\ntwo!');
+    await press('Home');
+    await press('ArrowLeft');
+    await type('?');
+    expect(source()).toBe('one?\n\ntwo!');
+  });
+});
+
 describe('a 5,000-line document', () => {
   it('re-measures a handful of nodes per keystroke, and a chunk for an Enter', async () => {
     ui = renderTest(createComponent(MarkdownEditor, { value: bigDocument() }), { width: 900, height: 700 });

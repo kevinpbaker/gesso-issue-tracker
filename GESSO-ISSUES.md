@@ -4,10 +4,10 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `5d67836`. Not yet pushed or released. Every
+per fix, `2c572e3` through `f0ade22`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passes with them: format,
-lint, types, 4,468 tests, build, API reports and the docs build.
+lint, types, 4,480 tests, build, API reports and the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -201,6 +201,27 @@ document takes 7 to 14 ms a frame, with about 3 to 6 ms of semantics. It
 was 15 to 18 ms with 7 to 10 ms of semantics, and 18 ms with 11 ms
 before the scoped rebuild.
 
+### 12. A selection couldn't leave its field
+
+**What:** the editor is one field per block, and a selection couldn't
+span two of them: no selecting two paragraphs, no copying a heading
+with its list. Gesso's cross-node selection covered static text only.
+
+**Fix:** editing groups (`f0ade22`). A container that sets
+`editingGroup` makes the fields inside select as one. Arrows move
+between fields at their edges (up and down keep the column), Shift
+extends across them, as do a drag and Shift with a press, and select
+all takes the group. Every field in the range draws its part. Edits
+over such a selection go to the group's `onEdit` with both ends,
+because joining blocks is the application's business; the editor joins
+the first block's head to the last block's tail, keeping the first
+block's type. While a selection spans fields, the shell's editing proxy
+holds the selected text, so the browser's own copy and cut work, and
+the editor's `copyText` makes that markdown. Specs:
+`editingGroup.spec.tsx` in Gesso, and "a selection across blocks" in
+`MarkdownEditor.spec.tsx`. Checked by hand in Chrome: a drag across
+three list items, typing over it, and undoing back.
+
 ## Not a bug, now documented
 
 - **Undo in a multi-block editor.** `historyUndo` and `historyRedo`
@@ -214,18 +235,6 @@ before the scoped rebuild.
 
 ## Still open
 
-- **Selection across blocks.** A selection can't span two editables, so
-  you can't select two paragraphs or copy a heading with its list. This
-  is a missing feature, not a defect, and the biggest piece of Gesso
-  work left for Phase 5. Putting the whole document in one editable
-  would give selection, undo and IME for free, but runs make every line
-  of a paragraph as tall as its tallest run, so one heading would make
-  every line heading-height. That's a pinned divergence from Chrome.
-  Two ways forward:
-  1. Line boxes of their own height in `ParagraphLayout`, then a
-     single-editable editor.
-  2. A selection model that spans editables, built on the existing
-     cross-node selection for static text.
 - **Percentage widths going stale in lazy rows.** Seen once in Phase 0
   and never reproduced since. A percentage-width row asked the same
   question after a resize got its old width back, which is exactly the

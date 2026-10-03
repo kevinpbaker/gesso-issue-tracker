@@ -46,8 +46,10 @@ out precisely where and why.
   tests. It has one undo history for the whole document, in which a
   markdown shortcut is its own step. It renders in chunks. In a
   production build in Chrome, a keystroke in the 5,000-line document
-  takes 7.5 to 10 ms a frame and an Enter 7 to 14 ms. Left: cross-block
-  selection, Mod+B/I/K, the slash menu, view source, paste and copy,
+  takes 7.5 to 10 ms a frame and an Enter 7 to 14 ms. Selection spans
+  blocks (an editing group in Gesso): drag, Shift and the arrows, select
+  all, typing or deleting over it, and copying it as markdown. Left:
+  Mod+B/I/K, the slash menu, view source, pasting markdown and HTML,
   mentions as chips, and IME testing.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
