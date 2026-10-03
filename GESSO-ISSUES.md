@@ -4,17 +4,17 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `2e3e56d` (another session's commits are
+per fix, `2c572e3` through `e73a5fc` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 45) were checked with their packages'
+build. The ones since (16 to 47) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
-in the same checkout fails the full check for now. After 45, the whole
-test suite passed: 4,672 tests.
+in the same checkout fails the full check for now. After 47, the whole
+test suite passed: 4,675 tests.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -573,6 +573,28 @@ wasn't run.
 
 **Fix:** the spec reads `current` (`ba99982`).
 
+### 46. A trackpad flick stuttered, most of all as it slowed
+
+**What:** Chrome on a Mac reports a trackpad's legacy `wheelDeltaY` as
+three times its pixel delta, so a 40-pixel step read as a mouse wheel's
+detent. Judged one event at a time, those steps were smoothed with a
+spring and the steps around them applied at once. The scroll-lag
+investigation had missed it: Chrome's injected test events always report
+-120, so they all looked like a mouse.
+
+**Fix:** once an event that doesn't look notched arrives, the wheel is
+taken to be precise while events keep coming (`9341d31`). Checked by
+specs against what Chrome reports; not yet watched on a Mac trackpad.
+
+### 47. Scrolled text shimmered at the end of a flick
+
+**What:** a trackpad's last steps are fractions of a pixel, and Canvas2D
+drew the scrolled content at that exact offset, so text landed between
+pixels and rasterised differently each frame.
+
+**Fix:** both renderers draw scrolled content on a whole device pixel;
+the offset keeps its fraction (`e73a5fc`).
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
@@ -606,6 +628,9 @@ wasn't run.
 
 ## Still open
 
+- **`boxShadows` is never painted.** Documented as a limit in the
+  renderers' docs; every theme's shadow scale is a no-op. The tracker's
+  tour uses a stronger border instead. Raised as its own task.
 - **Percentage widths going stale in lazy rows.** Seen once in Phase 0
   and never reproduced since. A percentage-width row asked the same
   question after a resize got its old width back, which is exactly the
