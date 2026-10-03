@@ -4,10 +4,10 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `29a36ac`. Not yet pushed or released. Every
+per fix, `2c572e3` through `f3a9544`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passes with them: format,
-lint, types, 4,485 tests, build, API reports and the docs build.
+lint, types, 4,487 tests, build, API reports and the docs build.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -247,6 +247,19 @@ begin, move and end (`101ea8a`), and `EditingService.select(anchor,
 focus)` sets one, in a field or across a group (`29a36ac`). The editor
 formats every block the selection covers and leaves it selected, so a
 second Mod+B takes the bold off again.
+
+### 15. A worker couldn't load a chunk on demand
+
+**What:** the HTML converter (parse5 and friends, 73 kB gzipped) was
+imported dynamically so it would load only on the first HTML paste,
+but the build inlined it into the render worker anyway. Vite builds
+workers as IIFE by default, and an IIFE can't be split.
+
+**Fix:** `gesso-vite-plugin` builds workers as ES modules, which is what
+it constructs them as, unless the application chose a format
+(`f3a9544`). The render worker went from 291 kB to 218 kB gzipped, and
+the converter is a separate chunk. Checked in a production build: an
+HTML paste loads it and lands.
 
 ## Not a bug, now documented
 

@@ -288,6 +288,25 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     commit(replaced(start.index, out, count), caret, 'structure', before);
   };
 
+  /**
+   * Pastes over a range, pinned by block so that it still lands right
+   * if the HTML converter had to be loaded first (see `paste.ts`).
+   */
+  const pasteAt = async (
+    from: { id: string; offset: number },
+    to: { id: string; offset: number },
+    text: string,
+    html: string | null
+  ): Promise<void> => {
+    const markdown = await pastedMarkdown(text, html);
+    const start = indexOf(from.id);
+    const end = indexOf(to.id);
+    if (start < 0 || end < start) {
+      return;
+    }
+    replaceRange({ index: start, offset: from.offset }, { index: end, offset: to.offset }, pastedBlocks(markdown) ?? markdown);
+  };
+
   const handlers: BlockHandlers = {
     input(id, text, caret) {
       const index = indexOf(id);
@@ -427,17 +446,15 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       commit(replaced(index, [{ ...current, text: done.text }]), { id, offset: done.end }, 'format', here(id, end), done.start);
     },
     paste(id, start, end, text, html) {
-      const index = indexOf(id);
-      const current = blocks.value[index];
+      const current = blocks.value[indexOf(id)];
       if (current === undefined || !inline(current)) {
         return false;
       }
-      const markdown = pastedMarkdown(text, html);
-      const pasted = pastedBlocks(markdown);
-      if (pasted === null && markdown === text) {
+      if (html === null && pastedBlocks(text) === null) {
+        // One plain line: the field's to insert, as typing is.
         return false;
       }
-      replaceRange({ index, offset: start }, { index, offset: end }, pasted ?? markdown);
+      void pasteAt({ id, offset: start }, { id, offset: end }, text, html);
       return true;
     },
     undo: () => restore(history.undo()),
@@ -474,8 +491,13 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         return;
       }
       if (edit.inputType === 'insertFromPaste') {
-        const markdown = pastedMarkdown(edit.data ?? '', edit.html ?? null);
-        replaceRange(start, end, pastedBlocks(markdown) ?? markdown);
+        const list = blocks.value;
+        void pasteAt(
+          { id: list[start.index]!.id, offset: start.offset },
+          { id: list[end.index]!.id, offset: end.offset },
+          edit.data ?? '',
+          edit.html ?? null
+        );
         return;
       }
       const list = blocks.value;

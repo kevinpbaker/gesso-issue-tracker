@@ -1,8 +1,3 @@
-import { fromHtml } from 'hast-util-from-html';
-import { toMdast } from 'hast-util-to-mdast';
-import { gfmToMarkdown } from 'mdast-util-gfm';
-import { toMarkdown } from 'mdast-util-to-markdown';
-
 import { detached, parse, type Block } from './markdown';
 
 /**
@@ -15,21 +10,14 @@ import { detached, parse, type Block } from './markdown';
  * editor.
  */
 
-export function htmlToMarkdown(html: string): string {
-  const tree = toMdast(fromHtml(html, { fragment: true }));
-  return toMarkdown(tree, {
-    bullet: '-',
-    emphasis: '_',
-    strong: '*',
-    fence: '`',
-    rule: '-',
-    extensions: [gfmToMarkdown()]
-  }).replace(/\n+$/, '');
-}
-
-/** What a paste is, as markdown: its HTML converted when it has some, else its text. */
-export function pastedMarkdown(text: string, html: string | null): string {
+/**
+ * What a paste is, as markdown: its HTML converted when it has some,
+ * else its text. Async because the converter is loaded the first time
+ * it's needed; see `htmlMarkdown.ts`.
+ */
+export async function pastedMarkdown(text: string, html: string | null): Promise<string> {
   if (html !== null && html.trim() !== '') {
+    const { htmlToMarkdown } = await import('./htmlMarkdown');
     const converted = htmlToMarkdown(html);
     if (converted.trim() !== '') {
       return converted;

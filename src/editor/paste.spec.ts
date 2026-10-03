@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { htmlToMarkdown, pastedBlocks, pastedMarkdown } from './paste';
+import { htmlToMarkdown } from './htmlMarkdown';
+import { pastedBlocks, pastedMarkdown } from './paste';
 
 describe('pasting', () => {
   it('turns HTML into markdown in the house style', () => {
@@ -12,10 +13,10 @@ describe('pasting', () => {
     );
   });
 
-  it('prefers the HTML, and falls back to the text', () => {
-    expect(pastedMarkdown('plain', '<p><b>rich</b></p>')).toBe('**rich**');
-    expect(pastedMarkdown('plain', null)).toBe('plain');
-    expect(pastedMarkdown('plain', '   ')).toBe('plain');
+  it('prefers the HTML, and falls back to the text', async () => {
+    expect(await pastedMarkdown('plain', '<p><b>rich</b></p>')).toBe('**rich**');
+    expect(await pastedMarkdown('plain', null)).toBe('plain');
+    expect(await pastedMarkdown('plain', '   ')).toBe('plain');
   });
 
   it('makes blocks of anything but one line of text', () => {

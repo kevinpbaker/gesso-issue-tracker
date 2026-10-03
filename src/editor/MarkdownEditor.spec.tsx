@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { editorFor, percent, shortcut, shortcuts, UiShortcutRegistry } from 'gesso-core';
 import { createComponent, type ComponentContext, type Inputs } from 'gesso-framework';
@@ -300,6 +300,7 @@ describe('pasting', () => {
     await caretIn('Paragraph', 0, 7);
     ui.fireEvent.paste('one\n\n- two\n- three');
     await ui.settle();
+    await ui.settle();
     expect(source()).toBe('before one\n\n- two\n- threeafter');
   });
 
@@ -307,16 +308,21 @@ describe('pasting', () => {
     await mount('x');
     await caretIn('Paragraph', 0, 'end');
     ui.fireEvent.paste('Steps one', '<h2>Steps</h2><ol><li>one</li></ol>');
-    await ui.settle();
-    expect(source()).toBe('x\n\n## Steps\n\n1. one');
+    // The converter is loaded on the first paste that needs it.
+    await vi.waitFor(async () => {
+      await ui.settle();
+      expect(source()).toBe('x\n\n## Steps\n\n1. one');
+    });
   });
 
   it('keeps inline formatting from pasted HTML in the same paragraph', async () => {
     await mount('ab');
     await caretIn('Paragraph', 0, 1);
     ui.fireEvent.paste('bold', '<b>bold</b>');
-    await ui.settle();
-    expect(source()).toBe('a**bold**b');
+    await vi.waitFor(async () => {
+      await ui.settle();
+      expect(source()).toBe('a**bold**b');
+    });
   });
 
   it('lets a field take a plain line of text, and makes a markdown line its block', async () => {
@@ -336,6 +342,7 @@ describe('pasting', () => {
     await caretIn('Paragraph', 0, 3);
     await press('ArrowDown', { shift: true });
     ui.fireEvent.paste('X\n\nY');
+    await ui.settle();
     await ui.settle();
     expect(source()).toBe('oneX\n\nYee four');
   });
