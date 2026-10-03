@@ -111,8 +111,12 @@ export function Tour(_inputs: Inputs<{}>, ctx: ComponentContext) {
       gap={8}
       padding={16}
       borderRadius={10}
+      // An opaque card with a firm edge, so it reads as sitting on top of
+      // the list rather than as part of it. Not `border`, which in the
+      // light theme is barely off the white page. (No shadow: Gesso's
+      // renderers don't paint `boxShadows` yet.)
       borderWidth={1}
-      borderColor="border"
+      borderColor="controlBorder"
       backgroundColor="surface"
       role="region"
       label="Tour">
