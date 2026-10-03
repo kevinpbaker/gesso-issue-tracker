@@ -329,8 +329,10 @@ describe('stepping through a list from an issue, and back', () => {
     expect(cursorKey()).toBe(far);
     const shown = ui.getAllByRole('option').find(node => ui.getSemantics(node).label!.startsWith(`${far} `))!;
     const edge = ui.getVisibleBox(list());
-    expect(ui.getVisibleBox(shown).y + ui.getVisibleBox(shown).height).toBeLessThanOrEqual(edge.y + edge.height);
-    expect(ui.getVisibleBox(shown).y + ui.getVisibleBox(shown).height).toBeGreaterThan(edge.y + edge.height - 40);
+    // Fractional sizes add up with float error, so to a hundredth of a pixel.
+    const bottom = Math.round((ui.getVisibleBox(shown).y + ui.getVisibleBox(shown).height) * 100) / 100;
+    expect(bottom).toBeLessThanOrEqual(edge.y + edge.height);
+    expect(bottom).toBeGreaterThan(edge.y + edge.height - 40);
   });
 
   it('keeps the selection and the grouping chosen, there and back', async () => {
