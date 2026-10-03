@@ -9,11 +9,15 @@
         The canvas is sized to its host, so the host needs a size. This
         is the whole of the CSS a Gesso application needs; everything
         else on the page is painted, not styled.
+
+        overscroll-behavior: on a Mac, a scroll past the end of the list
+        otherwise stretched the whole page and showed white behind it.
       */
       html,
       body {
         margin: 0;
         height: 100%;
+        overscroll-behavior: none;
       }
       #app {
         width: 100vw;

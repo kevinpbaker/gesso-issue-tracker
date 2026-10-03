@@ -126,6 +126,9 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
       width={percent(100)}
       height={percent(100)}
       y="stretch"
+      // The app is the page: a scroll nothing in it can use stops here
+      // rather than going back to the browser.
+      overscrollBehavior="contain"
       modifiers={[
         shortcuts({ registry }),
         global('Mod+Z', 'Undo', () => issues.send.undo()),
