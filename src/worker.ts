@@ -12,6 +12,8 @@ import { AppRoot, ROUTES, TeamIssues } from './app/routes';
 import { ShortcutsService } from './app/ShortcutsService';
 import { Compose } from './compose/ComposeContract';
 import { Views } from './views/ViewsContract';
+import { CommandsService } from './palette/CommandsService';
+import { Palette } from './palette/PaletteContract';
 import { NewIssueService } from './compose/NewIssueService';
 import { WorkspaceMeta } from './app/WorkspaceContract';
 import { Board } from './board/BoardContract';
@@ -26,6 +28,8 @@ renderRoot(AppRoot)
   .useChannel(IssueDetailChannel)
   .useChannel(Compose)
   .useChannel(Views)
+  .useChannel(Palette)
   .useService(ShortcutsService)
   .useService(NewIssueService)
+  .useService(CommandsService)
   .useRoutes({ routes: ROUTES, notFound: TeamIssues });

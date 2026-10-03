@@ -10,6 +10,8 @@ import { WorkspaceMeta } from '../app/WorkspaceContract';
 import type { GroupField, IssueFilter, IssueQuery, QueryGroup, SortField } from '../model/query';
 import { FilterBar } from './FilterBar';
 import { SaveViewDialog } from '../views/SaveViewDialog';
+import { CommandsService } from '../palette/CommandsService';
+import { propertyCommands } from '../palette/propertyCommands';
 import { filterFromQuery, filterToQuery, isEmptyFilter } from './filterUrl';
 import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { PriorityIcon } from '../ui/PriorityIcon';
@@ -108,6 +110,23 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
   const sort = internalState<SortField | null>(null);
   const collapsed = internalState<readonly string[]>([]);
   const saving = internalState(false);
+  const meta = ctx.channel(WorkspaceMeta);
+  const commands = ctx.inject(CommandsService);
+  // While issues are selected, the palette can change all of them at once.
+  ctx.onUnmount(
+    commands.register(() => {
+      const count = issues.view.selectedCount.value;
+      if (count === 0) return [];
+      const group = count === 1 ? 'The selected issue' : `The ${count.toLocaleString('en-US')} selected issues`;
+      return [
+        ...propertyCommands({ states: meta.view.states.value, users: meta.view.users.value, labels: meta.view.labels.value }, group, {
+          update: (patch, label) => issues.send.updateSelected({ patch, label }),
+          addLabel: (labelId, label) => issues.send.addLabelToSelected({ labelId, label })
+        }),
+        { id: 'selection:clear', label: 'Clear the selection', group, run: () => issues.send.clearSelection() }
+      ];
+    })
+  );
   // What the person narrowed the list to, kept in the url's query string.
   const refine = router.match.pipe(
     map(match => filterFromQuery(match?.query ?? {})),

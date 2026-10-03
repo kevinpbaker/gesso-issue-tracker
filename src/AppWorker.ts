@@ -27,6 +27,8 @@ import { detailSource } from './detail/detailSource';
 import { SearchIndex } from './search/SearchIndex';
 import { Views } from './views/ViewsContract';
 import { ViewsStore } from './views/ViewsStore';
+import { Palette } from './palette/PaletteContract';
+import { PaletteService } from './palette/PaletteService';
 import { Compose } from './compose/ComposeContract';
 import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
@@ -49,6 +51,7 @@ const search = new SearchIndex(store);
 const detail = new IssueDetailService(store, ME);
 const compose = new ComposeService(store, disk, ME);
 const views = new ViewsStore(disk);
+const palette = new PaletteService(store);
 
 const reset = (): void => {
   store.reset();
@@ -91,6 +94,13 @@ serveChannels([
         rename: ({ id, name }) => views.rename(id, name),
         remove: id => views.remove(id)
       }
+    }
+  },
+  {
+    token: Palette,
+    source: {
+      view: { results: palette.results },
+      commands: { setCatalog: entries => palette.setCatalog(entries), search: query => palette.search(query) }
     }
   }
 ]);

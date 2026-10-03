@@ -19,7 +19,9 @@ if (host === null) {
 const proof = new URLSearchParams(location.search).has('proof');
 const panel = proof ? proofPanel(host, { global: 'trackerProof' }) : null;
 // `path` mode: real urls, so a reload or a pasted link lands on the same screen.
-const app = createApp({ ...(panel?.options ?? {}), history: { mode: 'path' } });
+// `pageKeys`: the tracker is the whole page, so `c` or Mod+K pressed
+// before anything is clicked is the tracker's.
+const app = createApp({ ...(panel?.options ?? {}), history: { mode: 'path' }, pageKeys: true });
 
 panel?.attach(app);
 app.mount(host);

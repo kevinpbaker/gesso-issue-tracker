@@ -7,6 +7,8 @@ import { FocusService, internalState, RouterService, type ComponentContext, type
 
 import { routeParam } from '../app/params';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
+import { CommandsService } from '../palette/CommandsService';
+import { propertyCommands } from '../palette/propertyCommands';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
@@ -67,6 +69,22 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   const issue = detail.pipe(map(d => d.issue!));
   const update = (patch: Partial<Issue>, label: string): void => channel.send.update({ patch, label });
   const open = (key: string): void => router.navigate(`/issue/${key}`);
+  const meta = ctx.channel(WorkspaceMeta);
+  const commands = ctx.inject(CommandsService);
+  // On an issue's page, the palette changes that issue.
+  ctx.onUnmount(
+    commands.register(() => {
+      const current = inputs.detail.value.issue;
+      if (current === null) return [];
+      return propertyCommands({ states: meta.view.states.value, users: meta.view.users.value, labels: meta.view.labels.value }, current.key, {
+        update,
+        addLabel: (labelId, label) => {
+          const now = inputs.detail.value.issue;
+          if (now !== null && !now.labelIds.includes(labelId)) update({ labelIds: [...now.labelIds, labelId] }, label);
+        }
+      });
+    })
+  );
 
   // The description saves a moment after typing stops, and when focus
   // leaves the editor; whatever is pending goes then, once.

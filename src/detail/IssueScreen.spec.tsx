@@ -6,6 +6,7 @@ import { createComponent, route, RouterService, ServiceRegistry, type ComponentC
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { CommandsService } from '../palette/CommandsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
@@ -52,6 +53,7 @@ async function mount(store: IssueStore, key: string): Promise<void> {
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(CommandsService);
   const ui = renderTest(createComponent(Page), { channels: served.registry, width: 1400, height: 1400, services });
   const router = ui.runtime.services.get(RouterService);
   router.setRoutes({ routes: [route({ path: '/issue/:key', component: Page })] });

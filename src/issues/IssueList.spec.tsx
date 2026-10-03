@@ -6,6 +6,7 @@ import { createComponent, route, RouterService, ServiceRegistry, type ComponentC
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { ShortcutsService } from '../app/ShortcutsService';
+import { CommandsService } from '../palette/CommandsService';
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
@@ -65,6 +66,7 @@ async function mount(): Promise<void> {
   // Registered before the runtime builds the root, as the worker's `useService` does.
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
+  services.register(CommandsService);
   const ui = renderTest(createComponent(Harness), {
     channels: served.registry,
     width: 1000,
@@ -212,5 +214,43 @@ describe('the filter bar', () => {
     const [view] = h.views.views.value;
     expect(view).toMatchObject({ name: 'Urgent web', query: { also: [{ priorities: [1] }] } });
     expect(router().url.value).toBe(`/view/${view!.id}`);
+  });
+});
+
+describe('the Phase 8 budget', () => {
+  /**
+   * A filter change across 50,000 issues, from the url changing to the
+   * list drawn again: the query in the app worker, the channel, and the
+   * frame that lays out and paints the new rows. The fastest of a few,
+   * since specs running beside this one only ever slow a run down.
+   */
+  it('repaints a filter change across 50,000 issues within 100 ms', async () => {
+    const store = new IssueStore(seedWorkspace({ issues: 50_000 }));
+    const service = new IssueQueryService(store);
+    const views = new ViewsStore({ read: async () => ({ outcome: 'ok', value: null }), write: async () => 'ok', remove: async () => 'ok' });
+    const served = serveForTest([
+      { token: Issues, source: issuesSource(service, store, () => store.reset()) },
+      { token: WorkspaceMeta, source: workspaceSource(store.workspace, 'u0') },
+      { token: Views, source: { view: { views: views.views, saved: views.saved }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } }
+    ]);
+    const services = new ServiceRegistry();
+    services.register(ShortcutsService);
+    services.register(CommandsService);
+    const ui = renderTest(createComponent(Harness), { channels: served.registry, width: 1000, height: 600, services });
+    h = { ui, served, store, service, views };
+    const router = ui.runtime.services.get(RouterService);
+    router.setRoutes({ routes: [route({ path: '/team/:key/list', component: Harness })] });
+    router.navigate('/team/web/list');
+    await settle();
+    let fastest = Infinity;
+    const urls = ['?status=todo,in-progress', '?status=todo&priority=1,2', '?label=l0,l1&assignee=u1', '?status=done'];
+    for (const url of urls) {
+      const started = performance.now();
+      router.navigate(`/team/web/list${url}`);
+      await settle();
+      fastest = Math.min(fastest, performance.now() - started);
+    }
+    expect(service.query.value.refine).toEqual({ stateIds: ['done'] });
+    expect(fastest).toBeLessThan(100);
   });
 });

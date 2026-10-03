@@ -4,11 +4,11 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `be422e9`. Not yet pushed or released. Every
+per fix, `2c572e3` through `1d61bae`. Not yet pushed or released. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 26) were checked with their packages'
+build. The ones since (16 to 32) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
 in the same checkout fails the full check for now.
 
@@ -383,6 +383,59 @@ so fields asking for 100% got the width of the title.
 
 **Fix:** the content is the dialog's width inside its padding
 (`be422e9`).
+
+### 27. A wrapping row was squeezed to one line
+
+**What:** the filter bar wraps its controls onto a second line, and the
+list below it (which grows) squeezed it back to one: its second line was
+drawn over the list. A wrapping row's minimum height was its tallest
+item's.
+
+**Fix:** its minimum is all its lines at the width it's given, as in CSS
+(`db1a6a1`).
+
+### 28. A Combobox's chosen values had no names
+
+**What:** a several-value Combobox named its chosen values when they
+changed, so values from the url, set before the workspace's options had
+arrived over the channel, showed as blank chips.
+
+**Fix:** named from the current options (`a8ee079`). They also sit
+inside the field's box now, before the text, rather than above it.
+
+### 29. A url's lists read badly
+
+**What:** the router encoded commas, so a filter link read
+`status=todo%2Cdone`.
+
+**Fix:** `formatUrl` encodes only what would change the parse
+(`af33f45`).
+
+### 30. Shortcuts read Ctrl on a Mac
+
+**What:** the palette listed Cmd+K as Ctrl+K, on the grounds that the
+render worker couldn't see the platform; it can, and the editing keys
+already follow it.
+
+**Fix:** shortcuts print as the platform writes them, `⇧⌘K` on a Mac,
+and arrows as arrows (`6f03f61`).
+
+### 31. Keys did nothing before the first click
+
+**What:** keys reach the app through its canvas, which has focus only
+after something puts it there; a page that loads with focus on its
+body ignored `c` and Mod+K until a click.
+
+**Fix:** `createApp({ pageKeys: true })` for an app that is the page
+(`28f5b72`); the tracker and the create-gesso-app templates turn it on.
+
+### 32. A capped scroll view was always its cap
+
+**What:** the palette's list, and a Combobox's, were 280 to 420 pixels
+of mostly empty panel when they held a few rows: a scroll view with a
+`maxHeight` took the cap as its size, against the docs.
+
+**Fix:** its content's size within its bounds (`1d61bae`).
 
 ## Not a bug, now documented
 

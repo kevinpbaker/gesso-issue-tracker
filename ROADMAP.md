@@ -19,7 +19,7 @@ Gesso feels at least as good as a DOM one, the "only good for exotic
 demos" objection goes away. If it doesn't, this project should find
 out precisely where and why.
 
-**Status:** Phases 0 to 7 are done. Phase 8 is next.
+**Status:** Phases 0 to 8 are done. Phase 9 is next.
 
 - **Phase 1:** the app worker holds 50,000 seeded issues in one
   `IssueStore`, where every change is an undoable transaction, and saves
@@ -93,6 +93,22 @@ out precisely where and why.
   and go to the top of their state. The exit criterion is a spec: ten
   issues in a row with Create more and no mouse, after a validation
   error that is announced.
+- **Phase 8:** full-text search over titles, descriptions and comments
+  is an inverted index in the app worker (`src/search/SearchIndex.ts`),
+  built in idle slices after start, kept up to date by the store's
+  transactions, and answering in under 15 ms at 50,000 issues. The
+  filter bar narrows any list by text, status, assignee, label,
+  priority, project, team, due date and recency, combined, and keeps the
+  filter in the url (`?status=todo,done&q=...`). Any list, filter, sort
+  and grouping can be saved as a named view in the sidebar. Mod+K opens
+  the command palette, which lists every live shortcut, every place to
+  go, the theme, and while issues are selected (or one is open) every
+  status, priority, person and label to set; fuzzy matching over the
+  commands and all 50,000 issues runs in the app worker. The exit
+  criterion is two specs: a filter change across 50,000 issues repaints
+  in 18.8 ms in the test runtime (query, channel, layout and paint), and
+  every live shortcut and the selection's commands are found in the
+  palette, which runs them.
 - **Gesso problems:** everything found so far is logged in
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
 - **Gesso fixes:** the problems the tracker found are fixed on Gesso's
@@ -100,7 +116,7 @@ out precisely where and why.
   `link:` overrides. Typing in the 5,000-line editor spike went from
   re-measuring 13,415 nodes per keystroke to 17. See
   [`GESSO-ISSUES.md`](GESSO-ISSUES.md).
-`pnpm test` runs 1,488 tests in 23 files.
+`pnpm test` runs 1,524 tests in 29 files.
 
 ---
 
