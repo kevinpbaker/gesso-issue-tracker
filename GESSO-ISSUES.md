@@ -800,6 +800,13 @@ traps, "Autofocus".
   - two controls with one name are told apart (`dd22046`);
   - a relation such as `activedescendant` prints the node it points at,
     not `undefined` (`b67b85b`).
+- **A frame that throws fails the test** (`b43ada6`). `renderTest` and
+  the framework's `mountRuntime` let the runtime abandon such a frame,
+  as an application does, so a spec passed on a frame that never ran.
+  It was hiding one fault: `mountRuntime`'s canvas mock answered
+  `getTransform` with `undefined`, so any frame that drew a shadow threw.
+  The mock keeps the transform now; `allowFrameErrors` is for a spec
+  about the recovery itself. The tracker's 1,604 specs pass under it.
 - **The focus docs** said there was no `:focus-visible` after describing
   it; the stale paragraph is gone (`238d96b`).
 - **The API report churned on every build**: a short export such as
