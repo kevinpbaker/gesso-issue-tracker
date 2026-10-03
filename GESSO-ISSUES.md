@@ -4,17 +4,17 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `94a9f13` (another session's commits are
+per fix, `2c572e3` through `d3ab865` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
-build. The ones since (16 to 48) were checked with their packages'
+build. The ones since (16 to 51) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
-in the same checkout fails the full check for now. After 48, the whole
-test suite passed: 4,690 tests.
+in the same checkout fails the full check for now. After 51, the whole
+test suite passed: 4,691 tests.
 
 **How the tracker uses them:** `package.json` overrides every `gesso-*`
 package with a link to `../gesso/packages/*`, so the tracker runs on that
@@ -607,6 +607,38 @@ first shadow on top. A shadow's colour may be a palette name. A node is
 culled only once its shadows are off screen too (`94a9f13`). The tour
 panel now takes the theme's `shadows.large`. Checked by parity and
 renderer specs; the WebGPU shader hasn't been compiled on a GPU yet.
+
+### 49. Most of a trackpad flick was lost
+
+**What:** each wheel step was added to the offset the last layout
+settled on, so when two or more arrived between frames, as a trackpad's
+always do, each overwrote the one before. A steady flick moved 1,210
+pixels of the 2,500 asked for, unevenly.
+
+**Fix:** a scroll starts from where the container is going (`5b59d13`).
+
+### 50. A trackpad scrolled unevenly, then a beat behind
+
+**What:** a trackpad sends on its own clock, so frames got one, two or
+three of its steps: judder. Evening that out by pacing the steps behind
+the input (`fb2a6d8`) made it smooth but, on a 120 Hz MacBook Pro, a
+beat behind the hand.
+
+**Fix:** each frame puts the page where the input will have reached when
+the frame is shown, from the steps' velocity and timestamps, as a
+browser does for its own scrolling (`0bef08b`).
+
+### 51. A predicted flick sprang off the top
+
+**What:** the prediction reached the top before the steps did, the
+flick's last steps then found no room, and withdrawing the prediction
+moved the list back down off the top. A slowing flick also stepped back
+a pixel or two.
+
+**Fix:** room is judged from where the steps have really taken the
+list, each frame sets a clamped position, and a frame never moves
+against the latest step (`50d1638`, docs `d3ab865`). Confirmed on the
+MacBook Pro.
 
 ### Tooling
 
