@@ -314,6 +314,84 @@ describe('formatting', () => {
   });
 });
 
+/**
+ * Markers are hidden in every block but the one with the caret. The
+ * test measurer draws a 15px glyph 9px wide, so a block's x positions
+ * are arithmetic over the text as drawn.
+ */
+describe('hidden markers', () => {
+  const GLYPH = 9;
+  /** The runs a block draws: its spans without the hidden ones. */
+  const drawn = (label: string, index = 0): string[] => {
+    const field = ui.getAllByRole('textbox', { name: label })[index]!;
+    const spans = (field.properties.get('spans') ?? []) as { text: string; hidden?: boolean }[];
+    return spans.filter(span => span.hidden !== true).map(span => span.text);
+  };
+  /** A press at the x of a visible offset in a block, nudged to one side of it. */
+  async function pressAt(label: string, index: number, visible: number, nudge: number): Promise<void> {
+    const box = ui.getVisibleBox(ui.getAllByRole('textbox', { name: label })[index]!);
+    ui.fireEvent.pointerDown(box.x + visible * GLYPH + nudge, box.y + 5);
+    ui.fireEvent.pointerUp(box.x + visible * GLYPH + nudge, box.y + 5);
+    await ui.settle();
+  }
+
+  it('hides the markers of a block without the caret, and shows them in the one with it', async () => {
+    await mount('Some **bold** and `code`\n\nA [link](https://gesso.dev) here');
+    expect(drawn('Paragraph', 0)).toEqual(['Some ', 'bold', ' and ', 'code']);
+    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' here']);
+    await caretIn('Paragraph', 1, 0);
+    expect(drawn('Paragraph', 0)).toEqual(['Some ', 'bold', ' and ', 'code']);
+    expect(drawn('Paragraph', 1)).toEqual(['A ', '[', 'link', '](', 'https://gesso.dev', ')', ' here']);
+    // Back to hidden when the caret leaves.
+    await press('ArrowUp');
+    expect(drawn('Paragraph', 1)).toEqual(['A ', 'link', ' here']);
+    expect(drawn('Paragraph', 0)).toEqual(['Some ', '**', 'bold', '**', ' and ', '`', 'code', '`']);
+  });
+
+  it('puts the caret where the press landed in the text as it was drawn, before the markers showed', async () => {
+    await mount('Some **bold** words\n\nother');
+    // Just inside the end of `bold`: before the closing markers.
+    await pressAt('Paragraph', 0, 9, -2);
+    await type('X');
+    expect(source()).toBe('Some **boldX** words\n\nother');
+  });
+
+  it('puts the caret past the markers when the press lands past them', async () => {
+    await mount('Some **bold** words\n\nother');
+    await pressAt('Paragraph', 0, 9, 2);
+    await type('X');
+    expect(source()).toBe('Some **bold**X words\n\nother');
+  });
+
+  it('puts the caret in a later word at the character pressed, though the markers before it showed', async () => {
+    await mount('Some **bold** words\n\nother');
+    // `Some bold wo|rds`: twelve characters drawn, sixteen in the text.
+    await pressAt('Paragraph', 0, 12, 1);
+    await type('X');
+    expect(source()).toBe('Some **bold** woXrds\n\nother');
+  });
+
+  it('moves over hidden markers from block to block with the arrows, and shows them on arrival', async () => {
+    await mount('first\n\n**bold** end');
+    await caretIn('Paragraph', 0, 'end');
+    expect(drawn('Paragraph', 1)).toEqual(['bold', ' end']);
+    await press('ArrowRight');
+    expect(drawn('Paragraph', 1)).toEqual(['**', 'bold', '**', ' end']);
+    await type('X');
+    expect(source()).toBe('first\n\nX**bold** end');
+  });
+
+  it('leaves code blocks and the source view as they were', async () => {
+    await mount('```\nconst **a** = 1;\n```\n\nplain');
+    expect(ui.getByRole('textbox', { name: 'Code block' }).properties.get('spans')).toBeUndefined();
+    await caretIn('Paragraph', 0, 0);
+    await press('m', { meta: true, shift: true });
+    const markdown = ui.getByLabel('Markdown');
+    expect(markdown.properties.get('spans')).toBeUndefined();
+    expect(editorFor(markdown).text).toBe('```\nconst **a** = 1;\n```\n\nplain');
+  });
+});
+
 describe('pasting', () => {
   it('pastes markdown as blocks, splitting the paragraph it lands in', async () => {
     await mount('before after');

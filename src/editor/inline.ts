@@ -4,8 +4,9 @@
  * The runs cover the string exactly, character for character, because
  * an editable's `spans` are presentation over the text being typed and
  * Gesso draws the field unstyled when they disagree. So the markers
- * stay in the text: `**bold**` is drawn as two muted asterisks, a bold
- * word and two more. Hiding them is a Phase 5 question; see PHASE0.md.
+ * stay in the text: `**bold**` is two muted asterisks, a bold word and
+ * two more, or, with `hideMarkers`, the bold word alone, the asterisks
+ * kept in the text as hidden runs the caret steps over.
  *
  * No framework import: a run is plain data that happens to have the
  * shape of `UiTextSpan`.
@@ -19,6 +20,8 @@ export interface InlineRun {
   readonly textDecoration?: 'line-through' | 'underline';
   readonly color?: string;
   readonly backgroundColor?: string;
+  /** Markup the editor keeps in the text but does not draw. */
+  readonly hidden?: boolean;
 }
 
 type Style = Omit<InlineRun, 'text'>;
@@ -30,6 +33,7 @@ interface Token {
 }
 
 const MARK: Style = { color: 'textMuted' };
+const HIDDEN: Style = { hidden: true };
 const CODE_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 const CHIP: Style = { color: 'primary', backgroundColor: 'controlBackground' };
 
@@ -48,7 +52,13 @@ const TOKENS: readonly Token[] = [
 /** Characters that can open a token; everything else is skipped in one go. */
 const OPENERS = /[`*_~[@A-Z]/;
 
-export function inlineRuns(source: string): InlineRun[] {
+/**
+ * The runs for a block's source. `hideMarkers` hides the markup rather
+ * than muting it, which is how a block reads while the caret is
+ * elsewhere.
+ */
+export function inlineRuns(source: string, options: { hideMarkers?: boolean } = {}): InlineRun[] {
+  const marker: Style = options.hideMarkers === true ? HIDDEN : MARK;
   const runs: InlineRun[] = [];
   let plain = '';
   let at = 0;
@@ -72,8 +82,9 @@ export function inlineRuns(source: string): InlineRun[] {
           flush();
           match.slice(1).forEach((group, index) => {
             if (group !== undefined && group !== '') {
-              const run = { text: group, ...token.styles[index] };
-              if (token.styles[index] === MARK) markers.add(run);
+              const style = token.styles[index] === MARK ? marker : token.styles[index];
+              const run = { text: group, ...style };
+              if (style === marker) markers.add(run);
               runs.push(run);
             }
           });

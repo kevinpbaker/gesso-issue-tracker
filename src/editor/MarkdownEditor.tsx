@@ -1,4 +1,4 @@
-import { BehaviorSubject, type Observable } from 'rxjs';
+import { BehaviorSubject, combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
 
 import {
@@ -1081,6 +1081,14 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
 
   const fontSize = type === 'heading' ? HEADING_SIZES[(current.value.level ?? 1) - 1] : type === 'code' ? 13 : 15;
   const raw = type === 'raw';
+  // The markers show only in the block that has the caret, as in
+  // Obsidian's live preview; everywhere else they are hidden runs, still
+  // in the text. Showing them rewraps this block and no other.
+  const hasCaret = new BehaviorSubject(false);
+  const spans =
+    type === 'code' || raw
+      ? undefined
+      : combineLatest([current, hasCaret]).pipe(map(([b, shown]) => inlineRuns(b.text, { hideMarkers: !shown })));
 
   const field = (
     <editabletext
@@ -1088,7 +1096,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       multiline={true}
       textWrap="word"
       value={current.pipe(map(b => b.text))}
-      spans={type === 'code' || raw ? undefined : current.pipe(map(b => inlineRuns(b.text)))}
+      spans={spans}
       fontSize={fontSize}
       fontWeight={type === 'heading' ? 700 : 400}
       fontFamily={type === 'code' || raw ? MONO : undefined}
@@ -1097,7 +1105,11 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       label={label(current.value)}
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}
-      onFocus={() => handlers.focused(id)}
+      onFocus={() => {
+        hasCaret.next(true);
+        handlers.focused(id);
+      }}
+      onBlur={() => hasCaret.next(false)}
       onInput={event => handlers.input(id, event.value, event.selectionEnd)}
       modifiers={[focusRequests({ id, requests, fields })]}
     />
