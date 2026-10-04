@@ -37,6 +37,9 @@ import { paletteSource } from './palette/paletteSource';
 import { Recent } from './recent/RecentContract';
 import { RecentStore } from './recent/RecentStore';
 import { recentSource } from './recent/recentSource';
+import { References } from './references/ReferencesContract';
+import { ReferenceService } from './references/ReferenceService';
+import { referencesSource } from './references/referencesSource';
 import { Compose } from './compose/ComposeContract';
 import { ComposeService } from './compose/ComposeService';
 import { IssueQueryService } from './issues/IssueQueryService';
@@ -61,6 +64,7 @@ const compose = new ComposeService(store, disk, ME);
 const views = new ViewsStore(disk);
 const recent = new RecentStore(disk);
 const palette = new PaletteService(store, () => recent.keys.value);
+const references = new ReferenceService(store);
 const board = createBoardStore(store);
 const steps = new StepService(store, board, search);
 
@@ -99,7 +103,8 @@ serveChannels([
     }
   },
   { token: Palette, source: paletteSource(palette) },
-  { token: Recent, source: recentSource(recent) }
+  { token: Recent, source: recentSource(recent) },
+  { token: References, source: referencesSource(references) }
 ]);
 
 void compose.restore();

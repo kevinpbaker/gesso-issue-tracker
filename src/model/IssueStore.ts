@@ -198,6 +198,11 @@ export class IssueStore {
     return id === undefined ? undefined : this.issueMap.get(id);
   }
 
+  /** The highest key number a team has used: `1042` once `WEB-1042` exists. */
+  lastNumberOf(teamId: string): number {
+    return this.lastNumber.get(teamId) ?? 0;
+  }
+
   issues(): IterableIterator<Issue> {
     return this.issueMap.values();
   }

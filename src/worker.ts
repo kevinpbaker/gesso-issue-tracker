@@ -15,6 +15,7 @@ import { Views } from './views/ViewsContract';
 import { CommandsService } from './palette/CommandsService';
 import { Palette } from './palette/PaletteContract';
 import { Recent } from './recent/RecentContract';
+import { References } from './references/ReferencesContract';
 import { NewIssueService } from './compose/NewIssueService';
 import { WorkspaceMeta } from './app/WorkspaceContract';
 import { Board } from './board/BoardContract';
@@ -34,6 +35,7 @@ renderRoot(AppRoot)
   .useChannel(Views)
   .useChannel(Palette)
   .useChannel(Recent)
+  .useChannel(References)
   .useService(ShortcutsService)
   .useService(NewIssueService)
   .useService(CommandsService)
