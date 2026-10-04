@@ -95,22 +95,20 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | Active |  |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
+| button | Keyboard shortcuts |  |  |
 | StaticText | 20,181 issues |  |  |
 | StaticText | Group by |  |  |
-| combobox | Group by | hasPopup=listbox, required=false | Assignee ▾ |
+| combobox | Group by | hasPopup=listbox, required=false | Assignee |
 | StaticText | Assignee |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Sort by |  |  |
-| combobox | Sort by | hasPopup=listbox, required=false | Priority ▾ |
+| combobox | Sort by | hasPopup=listbox, required=false | Priority |
 | StaticText | Priority |  |  |
-| StaticText | ▾ |  |  |
 | button | Save as a view |  |  |
 | search | Filter issues |  |  |
 | StaticText | Search issues |  |  |
 | textbox | Search issues | required=false |  |
-| combobox | Add a filter | hasPopup=listbox, required=false | + Filter ▾ |
+| combobox | Add a filter | hasPopup=listbox, required=false | + Filter |
 | StaticText | + Filter |  |  |
-| StaticText | ▾ |  |  |
 | listbox | Issues | focused=true, multiselectable=true, orientation=vertical, required=false, activedescendant=MOB-2568 Fix notification batching on slow connections, In Review, Ada Okafor |  |
 | button | Ada Okafor, 1410 issues, expanded | expanded=true |  |
 | option | MOB-2568 Fix notification batching on slow connections, In Review, Ada Okafor |  |  |
@@ -140,7 +138,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-57 controls (button, radio, textbox, combobox, option, link), every one of them named.
+58 controls (button, radio, textbox, combobox, option, link), every one of them named.
 
 ## Tab order
 
@@ -179,11 +177,12 @@ accessibility tree reports focus after each press.
 30. radiogroup 'Appearance'
 31. separator 'Sidebar'
 32. button 'New issue'
-33. combobox 'Group by'
-34. combobox 'Sort by'
-35. button 'Save as a view'
-36. textbox 'Search issues'
-37. combobox 'Add a filter'
-38. listbox 'Issues'
+33. button 'Keyboard shortcuts'
+34. combobox 'Group by'
+35. combobox 'Sort by'
+36. button 'Save as a view'
+37. textbox 'Search issues'
+38. combobox 'Add a filter'
+39. listbox 'Issues'
 
 Every control above is in this list.

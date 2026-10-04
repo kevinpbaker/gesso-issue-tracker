@@ -95,10 +95,15 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | WEB-12 |  |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
+| button | Keyboard shortcuts |  |  |
 | region | WEB-12 Add the login redirect for admins | focused=true |  |
 | StaticText | Web |  |  |
 | StaticText | › |  |  |
 | StaticText | WEB-12 |  |  |
+| group | Web › Issues |  |  |
+| StaticText | Issue 8,909 of 12,606 in Web › Issues |  |  |
+| button | Previous issue |  |  |
+| button | Next issue |  |  |
 | textbox | Title | required=false | Add the login redirect for admins |
 | StaticText | Add the login redirect for admins |  |  |
 | button | View the markdown of Description |  |  |
@@ -132,14 +137,14 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | checkbox | Triaged | checked=true |  |
 | textbox | Task, done | required=false | Triaged |
 | StaticText | Triaged |  |  |
+| status |  | live=polite, atomic=true, relevant=additions text |  |
 | region | Sub-issues |  |  |
 | StaticText | Sub-issues |  |  |
 | combobox | Add a sub-issue | hasPopup=listbox, required=false, expanded=false |  |
 | region | Links |  |  |
 | StaticText | Links |  |  |
-| combobox | Link type | hasPopup=listbox, required=false | Related to ▾ |
+| combobox | Link type | hasPopup=listbox, required=false | Related to |
 | StaticText | Related to |  |  |
-| StaticText | ▾ |  |  |
 | combobox | Link to an issue | hasPopup=listbox, required=false, expanded=false |  |
 | region | Activity |  |  |
 | StaticText | Activity |  |  |
@@ -148,36 +153,34 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | Jonas Berg |  |  |
 | StaticText | Can we get a screenshot of the failure? |  |  |
 | StaticText | Kemi Adeyemi |  |  |
-| StaticText | Pushed a fix, needs **review**. |  |  |
+| StaticText | Pushed a fix, needs review. |  |  |
 | button | View the markdown of Comment |  |  |
 | region | Comment |  |  |
 | textbox | Paragraph | required=false |  |
+| status |  | live=polite, atomic=true, relevant=additions text |  |
 | button | Comment | disabled=true |  |
 | region | Properties |  |  |
+| button | Copy link |  |  |
+| button | Copy key |  |  |
 | StaticText | Status |  |  |
-| combobox | Status | hasPopup=listbox, required=false | In Review ▾ |
+| combobox | Status | hasPopup=listbox, required=false | In Review |
 | StaticText | In Review |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Priority |  |  |
-| combobox | Priority | hasPopup=listbox, required=false | Medium ▾ |
+| combobox | Priority | hasPopup=listbox, required=false | Medium |
 | StaticText | Medium |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Assignee |  |  |
 | combobox | Assignee | hasPopup=listbox, required=false, expanded=false |  |
 | StaticText | Labels |  |  |
 | combobox | Labels | hasPopup=listbox, required=false, expanded=false |  |
 | StaticText | Project |  |  |
-| combobox | Project | hasPopup=listbox, required=false | No project ▾ |
+| combobox | Project | hasPopup=listbox, required=false | No project |
 | StaticText | No project |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Estimate |  |  |
-| combobox | Estimate | hasPopup=listbox, required=false | 8 points ▾ |
+| combobox | Estimate | hasPopup=listbox, required=false | 8 points |
 | StaticText | 8 points |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Due date |  |  |
-| combobox | Due date | hasPopup=listbox, required=false, expanded=false | No date ▾ |
+| combobox | Due date | hasPopup=listbox, required=false, expanded=false | No date |
 | StaticText | No date |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Parent issue |  |  |
 | combobox | Parent issue | hasPopup=listbox, required=false, expanded=false |  |
 | region | Tour |  |  |
@@ -190,7 +193,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-64 controls (button, checkbox, radio, textbox, combobox, link), every one of them named.
+69 controls (button, checkbox, radio, textbox, combobox, link), every one of them named.
 
 ## Tab order
 
@@ -227,26 +230,31 @@ accessibility tree reports focus after each press.
 28. radiogroup 'Appearance'
 29. separator 'Sidebar'
 30. button 'New issue'
-31. textbox 'Title'
-32. button 'View the markdown of Description'
-33. textbox 'Heading level 2'
-34. checkbox 'Reproduced locally'
-35. checkbox 'Fix has a **regression test**'
-36. checkbox 'Triaged'
-37. combobox 'Add a sub-issue'
-38. combobox 'Link type'
-39. combobox 'Link to an issue'
-40. button 'View the markdown of Comment'
-41. textbox 'Paragraph'
-42. combobox 'Status'
-43. combobox 'Priority'
-44. combobox 'Assignee'
-45. combobox 'Labels'
-46. combobox 'Project'
-47. combobox 'Estimate'
-48. combobox 'Due date'
-49. combobox 'Parent issue'
-50. button 'End the tour'
-51. button 'Next step'
+31. button 'Keyboard shortcuts'
+32. textbox 'Title'
+33. button 'View the markdown of Description'
+34. textbox 'Heading level 2'
+35. checkbox 'Reproduced locally'
+36. checkbox 'Fix has a **regression test**'
+37. checkbox 'Triaged'
+38. combobox 'Add a sub-issue'
+39. combobox 'Link type'
+40. combobox 'Link to an issue'
+41. button 'View the markdown of Comment'
+42. textbox 'Paragraph'
+43. button 'Copy link'
+44. button 'Copy key'
+45. combobox 'Status'
+46. combobox 'Priority'
+47. combobox 'Assignee'
+48. combobox 'Labels'
+49. combobox 'Project'
+50. combobox 'Estimate'
+51. combobox 'Due date'
+52. combobox 'Parent issue'
+53. button 'End the tour'
+54. button 'Next step'
 
-Every control above is in this list.
+Every control above is in this list, but for those below.
+
+Left out of the Tab order on purpose, with the keyboard way to each: button 'Previous issue' (k), button 'Next issue' (j).

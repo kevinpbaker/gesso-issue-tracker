@@ -43,6 +43,12 @@ const CHECKS: readonly RouteCheck[] = [
       { role: 'textbox', name: 'Title' },
       { role: 'combobox', name: 'Status' },
       { role: 'combobox', name: 'Assignee' }
+    ],
+    // Pointer targets beside the title; the keyboard steps with j and k,
+    // and as tab stops they stood between the issue and its title.
+    outOfTabOrder: [
+      { role: 'button', name: 'Previous issue', keyboard: 'k' },
+      { role: 'button', name: 'Next issue', keyboard: 'j' }
     ]
   },
   { app: 'tracker', route: 'my-issues', path: '/my-issues', expect: [{ role: 'button', name: 'New issue' }] },

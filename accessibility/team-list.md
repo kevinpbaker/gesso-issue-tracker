@@ -98,22 +98,20 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | radio | Board | checked=false |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
+| button | Keyboard shortcuts |  |  |
 | StaticText | 12,606 issues |  |  |
 | StaticText | Group by |  |  |
-| combobox | Group by | hasPopup=listbox, required=false | Status ▾ |
+| combobox | Group by | hasPopup=listbox, required=false | Status |
 | StaticText | Status |  |  |
-| StaticText | ▾ |  |  |
 | StaticText | Sort by |  |  |
-| combobox | Sort by | hasPopup=listbox, required=false | Priority ▾ |
+| combobox | Sort by | hasPopup=listbox, required=false | Priority |
 | StaticText | Priority |  |  |
-| StaticText | ▾ |  |  |
 | button | Save as a view |  |  |
 | search | Filter issues |  |  |
 | StaticText | Search issues |  |  |
 | textbox | Search issues | required=false |  |
-| combobox | Add a filter | hasPopup=listbox, required=false | + Filter ▾ |
+| combobox | Add a filter | hasPopup=listbox, required=false | + Filter |
 | StaticText | + Filter |  |  |
-| StaticText | ▾ |  |  |
 | listbox | Issues | focused=true, multiselectable=true, orientation=vertical, required=false, activedescendant=WEB-27 Refactor image uploads in the mobile layout, Backlog, Dev Patel |  |
 | button | Backlog, 2507 issues, expanded | expanded=true |  |
 | option | WEB-27 Refactor image uploads in the mobile layout, Backlog, Dev Patel |  |  |
@@ -143,7 +141,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-59 controls (button, radio, textbox, combobox, option, link), every one of them named.
+60 controls (button, radio, textbox, combobox, option, link), every one of them named.
 
 ## Tab order
 
@@ -183,11 +181,12 @@ accessibility tree reports focus after each press.
 31. separator 'Sidebar'
 32. radiogroup 'Layout'
 33. button 'New issue'
-34. combobox 'Group by'
-35. combobox 'Sort by'
-36. button 'Save as a view'
-37. textbox 'Search issues'
-38. combobox 'Add a filter'
-39. listbox 'Issues'
+34. button 'Keyboard shortcuts'
+35. combobox 'Group by'
+36. combobox 'Sort by'
+37. button 'Save as a view'
+38. textbox 'Search issues'
+39. combobox 'Add a filter'
+40. listbox 'Issues'
 
 Every control above is in this list.

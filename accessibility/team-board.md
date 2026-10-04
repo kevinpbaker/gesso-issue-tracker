@@ -98,13 +98,12 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | radio | Board | checked=true |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
+| button | Keyboard shortcuts |  |  |
 | StaticText | 12,606 issues |  |  |
 | StaticText | Swimlanes |  |  |
-| combobox | Swimlanes | hasPopup=listbox, required=false | No swimlanes ▾ |
+| combobox | Swimlanes | hasPopup=listbox, required=false | No swimlanes |
 | StaticText | No swimlanes |  |  |
-| StaticText | ▾ |  |  |
-| status | Board announcements | live=polite, atomic=true, relevant=additions text |  |
-| StaticText | Board announcements |  |  |
+| status |  | live=polite, atomic=true, relevant=additions text |  |
 | group | Board | focused=true, activedescendant=WEB-5 Remove webhook retries on Safari |  |
 | StaticText | Backlog |  |  |
 | StaticText | 2,507 |  |  |
@@ -330,7 +329,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-37 controls (button, radio, combobox, link), every one of them named.
+38 controls (button, radio, combobox, link), every one of them named.
 
 ## Tab order
 
@@ -370,7 +369,8 @@ accessibility tree reports focus after each press.
 31. separator 'Sidebar'
 32. radiogroup 'Layout'
 33. button 'New issue'
-34. combobox 'Swimlanes'
-35. group 'Board'
+34. button 'Keyboard shortcuts'
+35. combobox 'Swimlanes'
+36. group 'Board'
 
 Every control above is in this list.

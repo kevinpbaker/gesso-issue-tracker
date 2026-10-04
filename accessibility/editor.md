@@ -94,6 +94,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | banner | Top bar |  |  |
 | button | New issue |  |  |
 | button | Nothing to undo | disabled=true |  |
+| button | Keyboard shortcuts |  |  |
 | button | View the markdown of Sample document |  |  |
 | region | Sample document |  |  |
 | textbox | Heading level 2 | required=false | Context |
@@ -126,6 +127,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 | StaticText | The cursor in the API response is ~~an offset~~ a token. |  |  |
 | textbox | Code block | required=false | const pageSize = 50; |
 | StaticText | const pageSize = 50; |  |  |
+| status |  | live=polite, atomic=true, relevant=additions text |  |
 | StaticText | Stored markdown |  |  |
 | StaticText | Markdown source |  |  |
 | region | Tour |  |  |
@@ -138,7 +140,7 @@ The workspace is the 50,000-issue seed, in a fresh browser profile, so nothing a
 
 ## Controls
 
-50 controls (button, checkbox, radio, textbox, link), every one of them named.
+51 controls (button, checkbox, radio, textbox, link), every one of them named.
 
 ## Tab order
 
@@ -175,12 +177,13 @@ accessibility tree reports focus after each press.
 28. radiogroup 'Appearance'
 29. separator 'Sidebar'
 30. button 'New issue'
-31. button 'View the markdown of Sample document'
-32. textbox 'Heading level 2'
-33. checkbox 'Reproduced locally'
-34. checkbox 'Fix has a regression test'
-35. checkbox 'Triaged'
-36. button 'End the tour'
-37. button 'Next step'
+31. button 'Keyboard shortcuts'
+32. button 'View the markdown of Sample document'
+33. textbox 'Heading level 2'
+34. checkbox 'Reproduced locally'
+35. checkbox 'Fix has a regression test'
+36. checkbox 'Triaged'
+37. button 'End the tour'
+38. button 'Next step'
 
 Every control above is in this list.
