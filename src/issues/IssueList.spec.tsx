@@ -19,6 +19,7 @@ import { Issues, type IssuesSummary } from './IssuesContract';
 import { issuesSource } from './issuesSource';
 import { Views } from '../views/ViewsContract';
 import { ViewsStore } from '../views/ViewsStore';
+import { budget } from '../test/budget';
 
 /**
  * The list from the keyboard, as Phase 3's exit criterion asks: every
@@ -439,6 +440,6 @@ describe('the Phase 8 budget', () => {
       fastest = Math.min(fastest, performance.now() - started);
     }
     expect(service.query.value.refine).toEqual({ stateIds: ['done'] });
-    expect(fastest).toBeLessThan(100);
+    expect(fastest).toBeLessThan(budget(100));
   });
 });

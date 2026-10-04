@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
 import { PaletteService, RECENT } from './PaletteService';
+import { budget } from '../test/budget';
 
 const make = (issues = 300, recent: readonly string[] = []) => {
   const service = new PaletteService(new IssueStore(seedWorkspace({ issues })), () => recent);
@@ -61,6 +62,6 @@ describe('the palette in the app worker', () => {
     const elapsed = performance.now() - started;
     expect(service.results.value.asked).toBe('webhook retr safari');
     expect(service.results.value.items.filter(item => item.kind === 'issue')).toHaveLength(8);
-    expect(elapsed).toBeLessThan(100);
+    expect(elapsed).toBeLessThan(budget(100));
   });
 });

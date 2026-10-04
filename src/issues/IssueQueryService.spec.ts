@@ -5,6 +5,7 @@ import { IssueStore } from '../model/IssueStore';
 import { DEFAULT_QUERY } from '../model/query';
 import { seedWorkspace } from '../model/seed';
 import { IssueQueryService, OVERSCAN } from './IssueQueryService';
+import { budget } from '../test/budget';
 
 const make = () => {
   const store = new IssueStore(seedWorkspace({ issues: 1_000 }));
@@ -82,7 +83,7 @@ describe('bulk edits', () => {
     store.undo();
     expect(ids.map(id => store.get(id)!.priority)).toEqual(before);
     // The edit, the transaction and the re-run of the 50,000-issue query together.
-    expect(elapsed).toBeLessThan(100);
+    expect(elapsed).toBeLessThan(budget(100));
     expect(summaries.length).toBeGreaterThanOrEqual(2);
   });
 });

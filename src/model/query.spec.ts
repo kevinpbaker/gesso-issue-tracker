@@ -4,6 +4,7 @@ import { SearchIndex } from '../search/SearchIndex';
 
 import { DEFAULT_QUERY, NONE, runQuery, type IssueQuery } from './query';
 import { seedWorkspace } from './seed';
+import { budget } from '../test/budget';
 
 const small = seedWorkspace({ issues: 2_000 });
 const run = (patch: Partial<IssueQuery>) => runQuery(small, small.issues, { ...DEFAULT_QUERY, ...patch });
@@ -148,7 +149,7 @@ describe('the Phase 1 budget', () => {
   ])('runs %s over 50,000 issues in under 100 ms', (_name, query) => {
     runQuery(big, big.issues, query); // warm the search cache and the JIT, as a running worker would be
     expect(runQuery(big, big.issues, query).ids.length).toBeGreaterThan(0);
-    expect(fastest(() => runQuery(big, big.issues, query))).toBeLessThan(100);
+    expect(fastest(() => runQuery(big, big.issues, query))).toBeLessThan(budget(100));
   });
 
   it('runs a full-text search through the index, combined with filters, in under 100 ms', () => {
@@ -158,6 +159,6 @@ describe('the Phase 1 budget', () => {
     const query: IssueQuery = { filter: { text: 'search pag', stateIds: ['todo'], priorities: [1, 2] }, sort: { field: 'updatedAt', direction: 'desc' }, group: 'assignee' };
     const search = (text: string) => index.search(text);
     expect(runQuery(big, store.issues(), query, search).ids.length).toBeGreaterThan(0);
-    expect(fastest(() => runQuery(big, store.issues(), query, search))).toBeLessThan(100);
+    expect(fastest(() => runQuery(big, store.issues(), query, search))).toBeLessThan(budget(100));
   });
 });

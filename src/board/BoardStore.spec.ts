@@ -5,6 +5,7 @@ import { IssueStore } from '../model/IssueStore';
 import { seedWorkspace } from '../model/seed';
 import { cellKey, slotKey } from './BoardContract';
 import { createBoardStore, OVERSCAN } from './BoardStore';
+import { budget } from '../test/budget';
 
 const make = (issues = 200) => {
   const store = new IssueStore(seedWorkspace({ issues }));
@@ -128,6 +129,6 @@ describe('the board store', () => {
     const { board } = make(50_000);
     board.setWindow({ lane: 'all', stateId: 'backlog', start: 0, end: 30 });
     await firstValueFrom(board.slots);
-    expect(performance.now() - started).toBeLessThan(2000);
+    expect(performance.now() - started).toBeLessThan(budget(2000));
   });
 });

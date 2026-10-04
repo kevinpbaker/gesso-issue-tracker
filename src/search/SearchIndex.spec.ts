@@ -4,6 +4,7 @@ import { IssueStore } from '../model/IssueStore';
 import { DEFAULT_QUERY, runQuery } from '../model/query';
 import { seedWorkspace } from '../model/seed';
 import { SearchIndex, tokenize } from './SearchIndex';
+import { budget } from '../test/budget';
 
 const make = (issues = 300) => {
   const store = new IssueStore(seedWorkspace({ issues }), 1, () => 1);
@@ -85,7 +86,7 @@ describe('the search index', () => {
     const answered = performance.now() - searched;
     expect(found!.size).toBeGreaterThan(0);
     // Generous for a loaded CI machine; in the worker it's well under.
-    expect(built).toBeLessThan(4_000);
-    expect(answered).toBeLessThan(100);
+    expect(built).toBeLessThan(budget(4_000));
+    expect(answered).toBeLessThan(budget(100));
   });
 });
