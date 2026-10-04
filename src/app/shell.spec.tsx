@@ -69,6 +69,7 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
   // As the app worker does at start: nothing saved, so a first visit.
   void preferences.restore();
   const compose = new ComposeService(store, disk, 'u0');
+  void compose.restore();
   const views = new ViewsStore(disk);
   const recent = new RecentStore(disk);
   const palette = new PaletteService(store, () => recent.keys.value);
@@ -219,6 +220,7 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     await settle();
     // The sidebar stands in for the page, and its Close button has the keyboard.
     expect(ui.queryByRole('main', { name: 'Main' })).toBeNull();
+    expect(ui.getLayout(ui.getByRole('navigation', { name: 'Sidebar' })).width).toBe(320);
     expect(ui.runtime.input.focus.focusedNode).toBe(ui.getByRole('button', { name: 'Close the sidebar' }));
     ui.fireEvent.press('Escape');
     await settle();
@@ -676,5 +678,107 @@ describe('the tour and a dialog on a narrow window', () => {
     await settle();
     const card = ui.getLayout(ui.getByRole('region', { name: 'Tour' }));
     expect(card.x + card.width).toBe(1280 - 16);
+  });
+});
+
+describe('a window resized across the narrow width', () => {
+  const focused = () => ui.runtime.input.focus.focusedNode;
+  const listScroll = () => ui.explain(ui.getByRole('listbox', { name: 'Issues' })).scroll?.scrollY ?? 0;
+  async function press(key: string, modifiers: { shift?: boolean; ctrl?: boolean } = {}): Promise<void> {
+    ui.fireEvent.press(key, modifiers);
+    await settle();
+  }
+  async function resize(width: number): Promise<void> {
+    ui.runtime.resize(width, 713);
+    await settle();
+  }
+
+  it('keeps the New issue dialog open, with what was typed and the caret where it was', async () => {
+    await mount('/team/web/list');
+    await press('c');
+    ui.fireEvent.type('Half a title');
+    await settle();
+    const title = ui.getByRole('textbox', { name: 'Title' });
+    for (const width of [375, 1280]) {
+      await resize(width);
+      expect(ui.queryByRole('dialog', { name: 'New issue' })).not.toBeNull();
+      // The same field, not a new one built from the saved draft.
+      expect(ui.getByRole('textbox', { name: 'Title' })).toBe(title);
+      expect(editorFor(title).text).toBe('Half a title');
+      expect(focused()).toBe(title);
+    }
+  });
+
+  it('keeps the palette and the shortcut sheet open', async () => {
+    await mount('/team/web/list');
+    await press('k', { ctrl: true });
+    ui.fireEvent.type('board');
+    await settle();
+    await resize(375);
+    expect(ui.queryByRole('dialog', { name: 'Command palette' })).not.toBeNull();
+    expect(editorFor(ui.getByRole('combobox', { name: 'Command or issue' })).text).toBe('board');
+    await press('Escape');
+    await press('?', { shift: true });
+    await resize(1280);
+    expect(ui.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeNull();
+  });
+
+  it("keeps the list's scroll and its focus, and so does showing or hiding the sidebar", async () => {
+    await mount('/team/web/list');
+    const list = ui.getByRole('listbox', { name: 'Issues' });
+    const box = ui.getVisibleBox(list);
+    ui.fireEvent.wheel({ x: box.x + box.width / 2, y: box.y + 200, deltaY: 1200 });
+    await settle();
+    ui.fireEvent.focus(list);
+    await settle();
+    const scrolled = listScroll();
+    expect(scrolled).toBeGreaterThan(0);
+    const same = (): void => {
+      expect(ui.getByRole('listbox', { name: 'Issues' })).toBe(list);
+      expect(listScroll()).toBe(scrolled);
+      expect(focused()).toBe(list);
+    };
+    await resize(375);
+    same();
+    await resize(1280);
+    same();
+    // The sidebar hidden and shown again with Mod+\.
+    await press('\\', { ctrl: true });
+    expect(ui.queryByRole('navigation', { name: 'Sidebar' })).toBeNull();
+    same();
+    await press('\\', { ctrl: true });
+    expect(ui.getByRole('navigation', { name: 'Sidebar' })).toBeDefined();
+    same();
+  });
+});
+
+describe('what a dialog dims', () => {
+  /** How many boxes are painted with the theme's scrim. */
+  const scrims = (): number => {
+    let count = 0;
+    const walk = (node: UiNode): void => {
+      if (node.properties.get('backgroundColor') === 'scrim') count++;
+      for (let child = node.firstChild; child !== null; child = child.nextSibling) walk(child);
+    };
+    walk(ui.runtime.layoutRoot());
+    return count;
+  };
+  async function press(key: string, modifiers: { shift?: boolean; ctrl?: boolean } = {}): Promise<void> {
+    ui.fireEvent.press(key, modifiers);
+    await settle();
+  }
+
+  it('dims the page behind the New issue dialog, the palette and the shortcut sheet, and not behind a menu', async () => {
+    await mount('/team/web/list');
+    for (const [key, modifiers] of [['c', {}], ['k', { ctrl: true }], ['?', { shift: true }]] as const) {
+      await press(key, modifiers);
+      expect(scrims()).toBe(1);
+      await press('Escape');
+      expect(scrims()).toBe(0);
+    }
+    ui.fireEvent.click(ui.getByRole('combobox', { name: 'Group by' }));
+    await settle();
+    expect(ui.getByRole('listbox', { name: 'Group by' })).toBeDefined();
+    expect(scrims()).toBe(0);
   });
 });

@@ -4,7 +4,7 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `684b59a` (another session's commits are
+per fix, `2c572e3` through `bf21b17` (another session's commits are
 interleaved in the same range). All of them are released: `main` is
 pushed through `99f67cc`, which is Gesso 0.5.1 (tag `v0.5.1`). Every
 fix has a spec that fails without it, a changeset, and docs where
@@ -991,6 +991,78 @@ window".
 Checked, for 68 to 70: the core (2,453), framework (1,020) and
 components (473) tests, the docs examples, types, lint, format, the
 API reports and the docs check.
+
+### 71. A split pane couldn't show one pane without unmounting the other
+
+**What:** resizing across 720 pixels closed an open dialog: the New
+issue dialog, the palette or the shortcut sheet. The shell built its
+layout with `Responsive`, one arm a `SplitPane` of the sidebar and the
+page, the other the page alone or the sidebar standing in for it, so
+crossing the width built the page again. The dialogs are declared in
+it, and a dialog closes with the component that declared it, which
+reported the close and set the service's `open` to false; the palette,
+mounted again with its service still open, threw. The list lost its
+scroll and the focus too, and showing or hiding the sidebar with
+Mod+\ did the same, a split swapped for the page alone. The shell's
+fault, mostly: only the arrangement changes, so the tree shouldn't. But
+Gesso gave it no way to keep a pane while not showing it: `SplitPane`
+always drew both, and there is no `display: none`.
+
+**Fix:** `SplitPane` takes `show`, `'both'`, `'first'` or `'second'`,
+and can be a stream. The pane on its own takes the whole container; the
+other is `visible: false` at no size, so it draws nothing, takes no
+press or focus and isn't in the semantics tree, and keeps everything in
+it (`feaf755`). Spec: `Structure.spec.ts`, "shows one pane alone,
+keeping the other where it was" (nodes, scroll and focus). Docs: split
+pane, "One pane at a time"; responsive, a paragraph on what a rebuilt
+arm loses and what to use instead. In the tracker, the shell is one
+`SplitPane` whose `show` follows the width, the drawer and the sidebar
+preference, with the width read from a `UiContainerSizeSource` and
+`containerBands` rather than `Responsive`; the sidebar is one instance
+that shows its Close button and takes Escape only as the drawer, and is
+as wide as its pane (it was 16 pixels short of it, and of a phone's
+width as the drawer). Specs: `shell.spec.tsx`, "a window resized across
+the narrow width": the New issue dialog with a half-typed title and the
+caret in it, the palette with what was typed, the shortcut sheet, and
+the list's scroll and focus through a resize both ways and the sidebar
+hidden and shown.
+
+### 72. A dialog didn't dim the page behind it
+
+**What:** a dialog's backdrop (every `Dialog` has one since 70) had no
+colour, so the page behind looked usable and the dialog sat flat on it.
+
+**Fix:** palettes have a `scrim` token, a colour with alpha, as
+`<dialog>::backdrop` and most design systems have one: the light ink,
+rgb(17, 24, 39), at 40% in `lightColors`, black at 60% in `darkColors`,
+and high contrast leaves it alone, since it's a ground (raised against
+the dark background, black would have come out grey). An overlay
+entry's backdrop is filled with it when the entry is `modal`, unless it
+says `scrim: false`; a backdrop that only closes a menu or a list of
+suggestions is never dimmed. The scrim is a child of the backdrop that
+takes no presses, so its fade-in, at a dialog's pace and snapped under
+reduced motion, never lets a press reach the page while it is at
+opacity 0, and it takes its theme from the entry's environment, as the
+content does. `Dialog` takes `scrim={false}`; its backdrop still keeps
+the page from presses. A dialog doesn't animate out, so neither does
+the scrim (`bf21b17`). Specs: `Dialog.spec.ts`, "Dialog's scrim" (its
+colour in both palettes, the fade, reduced motion, the opt-out);
+`Overlay.spec.ts`, "dims the page under a modal entry with the theme's
+scrim, and under nothing else"; `UiContrast.spec.ts`, "leaves the
+scrim ... as it was". Docs: dialog, "The page behind it is dimmed";
+positioning and overlays, the `scrim` option; themes, the token list
+(which lacked `placeholder` too). The docs' brand theme already had a
+`scrim` of its own; it's a stock token now. The screenshot baselines
+with an open dialog will differ, and weren't regenerated: they're
+Linux Chrome's, from CI. In the tracker the palette, which is its own
+overlay, says `modal`, so it's dimmed like the two dialogs. Spec:
+`shell.spec.tsx`, "dims the page behind the New issue dialog, the
+palette and the shortcut sheet, and not behind a menu".
+
+Checked, for 71 and 72: the core, framework, components and docs tests
+(4,435), types (and the docs'), lint, format, the API reports and the
+docs check; in the tracker, its 1,651 tests and types, and in Chrome
+at 800 and 400 pixels wide, light and dark.
 
 ### 68. A field couldn't name the list it opens, or say it suggests
 

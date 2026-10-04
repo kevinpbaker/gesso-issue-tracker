@@ -1,8 +1,19 @@
 import { BehaviorSubject, combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { darkTheme, lightTheme, percent, Responsive, shortcut, shortcuts, withContrast, type UiChild } from 'gesso-core';
-import { SegmentedControl, SplitPane } from 'gesso-components';
+import {
+  containerBands,
+  darkTheme,
+  lightTheme,
+  percent,
+  shortcut,
+  shortcuts,
+  sizeContainer,
+  UiContainerSizeSource,
+  withContrast,
+  type UiChild
+} from 'gesso-core';
+import { SegmentedControl, SplitPane, type SplitPaneProps } from 'gesso-components';
 import { RouterService, ShellService, type ComponentContext, type Inputs, type OutletProps } from 'gesso-framework';
 
 import { Issues } from '../issues/IssuesContract';
@@ -99,11 +110,22 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   // no room for the sidebar beside the page, so it takes the page's
   // place while it's open, from the top bar's Menu button, and closes
   // when a destination is chosen.
+  //
+  // Only the arrangement changes, never the tree: the split shows both
+  // panes or one, and the page behind the sidebar, or the sidebar put
+  // away, stays mounted. Rebuilding the page for a narrower window closed
+  // any dialog open over it and lost the list's scroll and the focus.
+  const room = new UiContainerSizeSource();
   const narrowNow = new BehaviorSubject(false);
-  let narrow = false;
+  ctx.effect(containerBands(room, [NARROW]), band => narrowNow.next(band < NARROW));
   const drawer = new BehaviorSubject(false);
   ctx.effect(router.url, () => drawer.next(false));
+  ctx.effect(narrowNow, narrow => !narrow && drawer.next(false));
   const closeDrawer = () => drawer.next(false);
+  const show = combineLatest([narrowNow, drawer, prefs.view.sidebarOpen]).pipe(
+    map(([narrow, open, sidebar]): SplitPaneShow => (narrow ? (open ? 'first' : 'second') : sidebar ? 'both' : 'second')),
+    distinctUntilChanged()
+  );
 
   const main = (
     // minWidth 0: without it a board five columns wide sets the pane's
@@ -140,7 +162,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         global('Mod+Z', 'Undo', () => issues.send.undo()),
         global('Mod+Shift+Z', 'Redo', () => issues.send.redo()),
         global('Mod+\\', 'Show or hide the sidebar', () =>
-          narrow ? drawer.next(!drawer.value) : prefs.send.setSidebarOpen(!prefs.view.sidebarOpen.value)
+          narrowNow.value ? drawer.next(!drawer.value) : prefs.send.setSidebarOpen(!prefs.view.sidebarOpen.value)
         ),
         global('g m', 'Go to my issues', () => router.navigate('/my-issues')),
         global('g l', 'Go to the list', () => router.navigate(`/team/${currentTeam(router)}/list`)),
@@ -161,46 +183,26 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
           keys.sheetOpen.value = !keys.sheetOpen.value;
         })
       ]}>
-      {Responsive({ at: [NARROW], as: 'row', flexGrow: 1, flexBasis: 0, minWidth: 0, y: 'stretch' }, size => {
-        narrow = size.width < NARROW;
-        narrowNow.next(narrow);
-        if (narrow) {
-          return (
-            <row key="narrow" flexGrow={1} flexBasis={0} minWidth={0} y="stretch">
-              {drawer.pipe(map(open => (open ? <Sidebar key="drawer" onClose={closeDrawer} /> : main)))}
-            </row>
-          );
-        }
-        closeDrawer();
-        return (
-          <row key="wide" flexGrow={1} flexBasis={0} minWidth={0} y="stretch">
-            {prefs.view.sidebarOpen.pipe(
-              map(open =>
-                open ? (
-                  <SplitPane
-                    key="split"
-                    flexGrow={1}
-                    label="Sidebar"
-                    split={prefs.view.sidebarSplit}
-                    onSplitChange={split => prefs.send.setSidebarSplit(split)}
-                    min={0.12}
-                    max={0.4}
-                    first={<Sidebar />}
-                    second={main}
-                  />
-                ) : (
-                  main
-                )
-              )
-            )}
-          </row>
-        );
-      })}
+      <row flexGrow={1} flexBasis={0} minWidth={0} y="stretch" containerSize={room} modifiers={[sizeContainer({ source: room })]}>
+        <SplitPane
+          flexGrow={1}
+          label="Sidebar"
+          split={prefs.view.sidebarSplit}
+          onSplitChange={split => prefs.send.setSidebarSplit(split)}
+          min={0.12}
+          max={0.4}
+          show={show}
+          first={<Sidebar drawer={drawer} onClose={closeDrawer} />}
+          second={main}
+        />
+      </row>
       <UndoToast />
       <Tour theme={theme} />
     </row>
   );
 }
+
+type SplitPaneShow = NonNullable<SplitPaneProps['show']>;
 
 /** The width, in CSS pixels, below which the sidebar stops sitting beside the page. */
 export const NARROW = 720;

@@ -1,6 +1,6 @@
 import { map } from 'rxjs/operators';
 
-import { autoFocus, percent, shortcut, shortcuts } from 'gesso-core';
+import { autoFocus, percent, shortcut } from 'gesso-core';
 import { Button } from 'gesso-components';
 import type { ComponentContext, Inputs } from 'gesso-framework';
 
@@ -25,33 +25,40 @@ function Section(inputs: Inputs<{ title: string }>, _ctx: ComponentContext) {
   );
 }
 
-/** `onClose` is given when the sidebar stands in for the page, and shows a Close button that brings it back. */
-export function Sidebar(inputs: Inputs<{ onClose?: () => void }>, ctx: ComponentContext) {
+/**
+ * `drawer` is whether the sidebar stands in for the page, on a narrow
+ * window: it shows a Close button then, and Escape closes it too, both
+ * calling `onClose` to bring the page back.
+ */
+export function Sidebar(inputs: Inputs<{ drawer?: boolean; onClose?: () => void }>, ctx: ComponentContext) {
   const meta = ctx.channel(WorkspaceMeta);
   const views = ctx.channel(Views);
   const { registry } = ctx.inject(ShortcutsService);
 
   return (
     <column
+      width={percent(100)}
       height={percent(100)}
       flexGrow={1}
       backgroundColor="surface"
       role="navigation"
       label="Sidebar"
-      modifiers={
-        inputs.onClose.value === undefined
-          ? []
-          : [shortcuts({ registry }), shortcut({ registry, keys: 'Escape', label: 'Close the sidebar', run: () => inputs.onClose.value?.() })]
-      }>
+      modifiers={[
+        shortcut({ registry, keys: 'Escape', label: 'Close the sidebar', when: () => inputs.drawer.value === true, run: () => inputs.onClose.value?.() })
+      ]}>
       <row height={48} paddingLeft={16} paddingRight={12} y="center" x="space-between">
         <text text="Gesso Issues" fontSize={14} fontWeight={700} color="text" />
-        {inputs.onClose.value === undefined ? (
-          []
-        ) : (
-          // Takes the keyboard as the panel opens, so Escape or Enter goes straight back.
-          <Button label="Close the sidebar" size="small" variant="plain" onClick={() => inputs.onClose.value?.()} rootModifiers={[autoFocus()]}>
-            <text text="Close" fontSize={12} color="text" />
-          </Button>
+        {inputs.drawer.pipe(
+          map(drawer =>
+            drawer === true ? (
+              // Takes the keyboard as the panel opens, so Escape or Enter goes straight back.
+              <Button label="Close the sidebar" size="small" variant="plain" onClick={() => inputs.onClose.value?.()} rootModifiers={[autoFocus()]}>
+                <text text="Close" fontSize={12} color="text" />
+              </Button>
+            ) : (
+              []
+            )
+          )
         )}
       </row>
       <scrollview flexGrow={1} flexBasis={0} paddingLeft={8} paddingRight={8} paddingBottom={12}>

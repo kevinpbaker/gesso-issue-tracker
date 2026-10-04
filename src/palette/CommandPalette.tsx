@@ -121,6 +121,9 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
       center: 'x',
       environment: placeholder,
       dismissOnOutsidePress: true,
+      // A dialog that holds the keyboard, so the page behind it is dimmed
+      // as it is behind the others.
+      modal: true,
       onClose: () => {
         release();
         service.open.value = false;
