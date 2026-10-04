@@ -1195,6 +1195,25 @@ function numbering(list: readonly Block[]): Map<string, number> {
   return out;
 }
 
+/**
+ * The keys the editor handles itself, for the shortcut sheet. They never
+ * reach the shortcut registry, so they're listed here, beside the code
+ * that handles them: a key added below belongs in this list too.
+ */
+export const EDITOR_SHORTCUTS: readonly { readonly keys: string; readonly label: string }[] = [
+  { keys: 'Mod+B', label: 'Bold' },
+  { keys: 'Mod+I', label: 'Italic' },
+  { keys: 'Mod+E', label: 'Inline code' },
+  { keys: 'Mod+K', label: 'Link' },
+  { keys: 'Mod+Shift+X', label: 'Strikethrough' },
+  { keys: '/', label: 'Turn an empty line into a heading, a list or another block' },
+  { keys: 'Tab', label: 'Indent a list item' },
+  { keys: 'Shift+Tab', label: 'Outdent a list item' },
+  { keys: 'Escape Tab', label: 'Leave the editor' },
+  { keys: 'Mod+Shift+M', label: 'Show or hide the markdown source' },
+  { keys: 'Mod+Enter', label: 'Send the comment' }
+];
+
 /** The formatting a shortcut asks for: Mod+B, I, E (code), K (link) and Shift+X (strikethrough). */
 function shortcutMark(key: string, shift: boolean): Mark | 'link' | null {
   switch (key.toLowerCase()) {
