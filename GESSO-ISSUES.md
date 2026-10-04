@@ -5,10 +5,13 @@ it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
 per fix, `2c572e3` through `bf21b17` (another session's commits are
-interleaved in the same range). All of them are released: `main` is
-pushed through `99f67cc`, which is Gesso 0.5.1 (tag `v0.5.1`). Every
-fix has a spec that fails without it, a changeset, and docs where
-behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
+interleaved in the same range). Those up to 67, and the 68 about a
+field naming its list, are released: `main` is pushed through
+`99f67cc`, which is Gesso 0.5.1 (tag `v0.5.1`). The 68 about a dialog
+taller than the window, and 69 to 73 (`e4d2483` on), are committed to
+`main` but neither pushed nor released yet. Every fix has a spec that
+fails without it, a changeset, and docs where behavior changed.
+Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
 build. The ones since (16 to 57) were checked with their packages'
 types, tests and API reports, because another session's unfinished work
@@ -1063,6 +1066,59 @@ Checked, for 71 and 72: the core, framework, components and docs tests
 (4,435), types (and the docs'), lint, format, the API reports and the
 docs check; in the tracker, its 1,651 tests and types, and in Chrome
 at 800 and 400 pixels wide, light and dark.
+
+### 73. A select's value set its least width, so it ran past a narrow row
+
+**What:** at 320 CSS pixels wide (a 1280 pixel window zoomed to 400%,
+WCAG's reflow width), the New issue dialog's Priority select and its
+Create issue button ran past the dialog's right edge. The three
+property selects share a row with `flexBasis={0}`, but a `Select`'s
+value was one line that never truncated, so a select couldn't be
+narrower than its value and the row overflowed. A text field or a
+combobox in the same place gives way; a select couldn't, and a
+caller's `minWidth={0}` didn't help, since the value then ran over the
+chevron and out of the trigger.
+
+**Fix:** a select's least width is nothing, as a text field's is, and
+its value is one line cut short with an ellipsis before the chevron; a
+`minWidth` passed in still wins (`2486523`). Spec: `Select.spec.ts`,
+"gives way to the row, truncating its value rather than running past
+the edge". Docs: select, "In a narrow row".
+
+**Not Gesso's:** the rest of the 320 pixel sweep was the tracker's
+layout. Gesso's flex wrapping, ellipsis and the clamping of anchored
+popovers to the window did what they were asked; the menus, the
+slash menu, the selects' lists, the shortcut sheet and the issue page
+already fitted.
+- **The New issue dialog** wraps its properties, two to a line or one,
+  and puts its buttons under the switch, at the end, when they don't
+  fit beside it. Fixed in Gesso alone, the selects would have fitted
+  three to a line, as "No pri…".
+- **The command palette** was 560 pixels wide and centred, so it ran
+  off both edges: the overlay layer centres an entry as asked, as CSS
+  does. It keeps 16 pixels each side now and is at most as wide as
+  what's between, as `Dialog` does.
+- **The top bar** was two groups pushed apart, and the controls' group
+  didn't shrink: the List/Board control was drawn over the breadcrumb,
+  which had shrunk to nothing, and `?` was off the edge. It's one
+  wrapping row now, the breadcrumb with room to be read; and the
+  layout switch is taken out off a team page rather than
+  `visible={false}`, which kept its room.
+- **A list row's columns** needed 520 pixels, so its status, date and
+  assignee were drawn off the edge. Below a list width of 540 a row is
+  two lines, read once for the whole list with `containerBands`.
+- **A filter's combobox** was 220 pixels whatever the bar, which put
+  its × off the edge; it gives way now.
+
+Specs: `shell.spec.tsx`, "at 320 CSS pixels, a window zoomed to 400%":
+each control of the top bar, the palette, the New issue dialog, a list
+row and the filter bar inside the window and clear of its neighbours.
+
+Checked, for 73: Gesso's whole test suite (4,804), types, lint, format,
+the API reports (unchanged) and the docs check; in the tracker, its
+1,652 tests and types, and in Chrome at 320 pixels wide: the list, the
+board, an issue, the palette, the shortcut sheet and the New issue
+dialog.
 
 ### 68. A field couldn't name the list it opens, or say it suggests
 

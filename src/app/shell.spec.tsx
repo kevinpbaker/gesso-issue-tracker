@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { darkTheme, editorFor, lightTheme, UiNodeType, type UiNode } from 'gesso-core';
 import { createComponent, FocusService, RouterService, ServiceRegistry, ShellService } from 'gesso-framework';
-import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
+import { nodesUnder, renderTest, serveForTest, textProperty, type Rendered, type ServedForTest } from 'gesso-testing';
 
 import { Board } from '../board/BoardContract';
 import { boardSource } from '../board/boardSource';
@@ -240,6 +240,115 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     const properties = ui.getLayout(ui.getByRole('region', { name: 'Properties' }));
     expect(properties.y).toBeGreaterThan(issue.y);
     expect(properties.x + properties.width).toBeLessThanOrEqual(320);
+  });
+
+  /** Where each control is seen, by its role and name. */
+  const boxes = (controls: readonly (readonly [string, string])[]) =>
+    controls.map(([role, name]) => ({ name, box: ui.getVisibleBox(ui.getByRole(role as 'button', { name })) }));
+  type Placed = { name: string; box: { x: number; y: number; width: number; height: number } };
+  /** Each box inside the 320 pixels across, and none over another. */
+  function laidOut(placed: readonly Placed[], within = { x: 0, width: 320 }): void {
+    for (const { name, box } of placed) {
+      expect(box.x, name).toBeGreaterThanOrEqual(within.x);
+      expect(box.x + box.width, name).toBeLessThanOrEqual(within.x + within.width);
+    }
+    for (const [i, a] of placed.entries()) {
+      for (const b of placed.slice(i + 1)) {
+        const apart =
+          a.box.x + a.box.width <= b.box.x ||
+          b.box.x + b.box.width <= a.box.x ||
+          a.box.y + a.box.height <= b.box.y ||
+          b.box.y + b.box.height <= a.box.y;
+        expect(apart, `${a.name} and ${b.name}`).toBe(true);
+      }
+    }
+  }
+
+  it("wraps the top bar's controls under the breadcrumb, rather than over it or off the edge", async () => {
+    // The List/Board control was drawn over the breadcrumb, which had
+    // shrunk to nothing, and the ? button ran off the right edge.
+    await mount('/team/web/list', 320, 256);
+    const crumb = { name: 'breadcrumb', box: ui.getVisibleBox(ui.getByText('Web › Issues')) };
+    expect(crumb.box.width).toBeGreaterThan(60);
+    laidOut([
+      crumb,
+      ...boxes([
+        ['button', 'Menu'],
+        ['radiogroup', 'Layout'],
+        ['button', 'New issue'],
+        ['button', 'Nothing to undo'],
+        ['button', 'Keyboard shortcuts']
+      ])
+    ]);
+    // The page starts under the top bar, however many lines it took.
+    const bar = ui.getLayout(ui.getByRole('banner', { name: 'Top bar' }));
+    expect(ui.getVisibleBox(ui.getByRole('textbox', { name: 'Search issues' })).y).toBeGreaterThanOrEqual(bar.y + bar.height);
+  });
+
+  it('keeps the top bar one line where there is room, with no layout switch off a team page', async () => {
+    await mount('/team/web/list');
+    expect(ui.getLayout(ui.getByRole('banner', { name: 'Top bar' })).height).toBe(48);
+    await mount('/issue/WEB-12', 320, 256);
+    expect(ui.queryByRole('radiogroup', { name: 'Layout' })).toBeNull();
+    laidOut(boxes([['button', 'Menu'], ['button', 'New issue'], ['button', 'Nothing to undo'], ['button', 'Keyboard shortcuts']]));
+  });
+
+  it('keeps the command palette inside the window', async () => {
+    // 560 wide and centred, it ran off both edges.
+    await mount('/team/web/list', 320, 568);
+    ui.fireEvent.press('k', { ctrl: true });
+    await settle();
+    const palette = ui.getVisibleBox(ui.getByRole('dialog', { name: 'Command palette' }));
+    expect(palette.x).toBe(16);
+    expect(palette.width).toBe(320 - 32);
+    laidOut(boxes([['combobox', 'Command or issue'], ['option', 'Undo']]), palette);
+  });
+
+  it("stacks the New issue dialog's properties and keeps its buttons inside it", async () => {
+    // The Priority select and the Create issue button ran past the dialog's right edge.
+    await mount('/team/web/list', 320, 568);
+    ui.fireEvent.press('c');
+    await settle();
+    const dialog = ui.getLayout(ui.getByRole('dialog', { name: 'New issue' }));
+    const controls: readonly (readonly [string, string])[] = [
+      ['textbox', 'Title'],
+      ['combobox', 'Team'],
+      ['combobox', 'Status'],
+      ['combobox', 'Priority'],
+      ['combobox', 'Assignee'],
+      ['combobox', 'Labels'],
+      ['switch', 'Create more'],
+      ['button', 'Discard draft'],
+      ['button', 'Create issue']
+    ];
+    // Laid out rather than seen: the dialog's body scrolls what doesn't fit.
+    laidOut(
+      controls.map(([role, name]) => ({ name, box: ui.getLayout(ui.getByRole(role as 'button', { name })) })),
+      dialog
+    );
+    // Still at the end, under the switch.
+    const create = ui.getLayout(ui.getByRole('button', { name: 'Create issue' }));
+    expect(create.x + create.width).toBeCloseTo(dialog.x + dialog.width - 20, 0);
+  });
+
+  it('draws each issue in two lines, all of it on screen', async () => {
+    // Its columns needed 520 pixels: the status, the date and the
+    // assignee were drawn past the edge.
+    await mount('/team/web/list', 320, 640);
+    const row = ui.getAllByRole('option')[0]!;
+    const drawn = nodesUnder(row).filter(node => (textProperty(node) ?? '') !== '');
+    expect(drawn.map(node => textProperty(node))).toEqual(['!', 'WEB-27', 'Refactor image uploads in the mobile layout', expect.stringMatching(/^Backlog · .+ · Improvement · Accessibility$/), 'DP']);
+    laidOut(drawn.map(node => ({ name: textProperty(node)!, box: ui.getVisibleBox(node) })));
+  });
+
+  it("keeps a filter's × on screen", async () => {
+    await mount('/team/web/list', 320, 640);
+    ui.fireEvent.click(ui.getByRole('combobox', { name: 'Add a filter' }));
+    await settle();
+    ui.fireEvent.press('Enter');
+    await settle();
+    expect(ui.getVisibleBox(ui.getByRole('group', { name: 'Status filter' })).width).toBeLessThanOrEqual(320 - 32);
+    laidOut(boxes([['combobox', 'Status'], ['button', 'Remove the status filter'], ['combobox', 'Add a filter']]));
   });
 
   it('has no Menu button when the sidebar fits', async () => {

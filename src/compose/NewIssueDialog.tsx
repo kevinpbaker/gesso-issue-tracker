@@ -55,6 +55,9 @@ export function NewIssueDialog(inputs: Inputs<{ open: boolean; onClose: () => vo
   );
 }
 
+/** The width a property field starts from, before the row shares out what's left or wraps. */
+const PROPERTY = 150;
+
 const PRIORITIES: readonly SelectOption[] = ([0, 1, 2, 3, 4] as Priority[]).map(p => ({ value: String(p), label: PRIORITY_NAMES[p] }));
 
 /** A draft as one string, its keys in a fixed order, to tell one draft from another. */
@@ -193,13 +196,15 @@ function DraftForm(inputs: Inputs<{ draft: Draft; wrote: (draft: Draft) => void;
           onSubmit={() => void submit()}
         />
       </column>
-      <row gap={10} width={percent(100)}>
-        <Select label="Team" options={teams} {...issue.fields.teamId.bind()} flexGrow={1} flexBasis={0} />
-        <Select label="Status" options={states} {...issue.fields.stateId.bind()} flexGrow={1} flexBasis={0} />
-        <Select label="Priority" options={PRIORITIES} {...issue.fields.priority.bind()} flexGrow={1} flexBasis={0} />
+      {/* The properties share a row where there's room, and wrap, two to a
+          line or one, where there isn't (a phone, or a window zoomed to 400%). */}
+      <row gap={10} width={percent(100)} flexWrap="wrap">
+        <Select label="Team" options={teams} {...issue.fields.teamId.bind()} flexGrow={1} flexBasis={PROPERTY} />
+        <Select label="Status" options={states} {...issue.fields.stateId.bind()} flexGrow={1} flexBasis={PROPERTY} />
+        <Select label="Priority" options={PRIORITIES} {...issue.fields.priority.bind()} flexGrow={1} flexBasis={PROPERTY} />
       </row>
-      <row gap={10} width={percent(100)}>
-        <Combobox label="Assignee" placeholder="Unassigned" options={people} {...issue.fields.assigneeId.bind()} flexGrow={1} flexBasis={0} />
+      <row gap={10} width={percent(100)} flexWrap="wrap">
+        <Combobox label="Assignee" placeholder="Unassigned" options={people} {...issue.fields.assigneeId.bind()} flexGrow={1} flexBasis={PROPERTY} />
         <Combobox
           label="Labels"
           placeholder="Add a label"
@@ -208,25 +213,28 @@ function DraftForm(inputs: Inputs<{ draft: Draft; wrote: (draft: Draft) => void;
           values={issue.fields.labelIds.value}
           onValuesChange={next => issue.fields.labelIds.change(next)}
           flexGrow={1}
-          flexBasis={0}
+          flexBasis={PROPERTY}
         />
       </row>
       <text text={problems} live="assertive" fontSize={12} color="danger" />
-      <row gap={10} y="center" width={percent(100)}>
+      {/* The buttons go under the switch, still at the end, when the three
+          don't fit on one line. */}
+      <row gap={10} y="center" width={percent(100)} flexWrap="wrap">
         <Switch label="Create more" checked={createMore} onChange={on => (createMore.value = on)} />
-        <box flexGrow={1} />
-        <Button
-          variant="plain"
-          label="Discard draft"
-          onClick={() => {
-            compose.send.discard();
-            inputs.close.value();
-          }}>
-          <text text="Discard" fontSize={13} color="textMuted" />
-        </Button>
-        <Button label="Create issue" description="Mod+Enter" onClick={() => void submit()}>
-          <text text="Create issue" fontSize={13} color="background" />
-        </Button>
+        <row gap={10} y="center" x="end" flexGrow={1}>
+          <Button
+            variant="plain"
+            label="Discard draft"
+            onClick={() => {
+              compose.send.discard();
+              inputs.close.value();
+            }}>
+            <text text="Discard" fontSize={13} color="textMuted" />
+          </Button>
+          <Button label="Create issue" description="Mod+Enter" onClick={() => void submit()}>
+            <text text="Create issue" fontSize={13} color="background" />
+          </Button>
+        </row>
       </row>
     </column>
   );

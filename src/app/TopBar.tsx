@@ -1,5 +1,5 @@
 import { BehaviorSubject, combineLatest } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { distinctUntilChanged, map } from 'rxjs/operators';
 
 import { Button, SegmentedControl } from 'gesso-components';
 import { RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
@@ -62,14 +62,37 @@ export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, 
     place.next(placeOf(url, { teams, projects }, saved))
   );
 
+  // One wrapping row rather than two groups pushed apart: where the
+  // controls don't fit beside the breadcrumb (a phone, or a window zoomed
+  // to 400%), they go onto a line of their own under it, and onto a third
+  // if one line can't hold them, rather than over it or off the edge. The
+  // breadcrumb keeps room to be read, and truncates past that.
   return (
-    <row height={48} paddingLeft={16} paddingRight={12} gap={12} y="center" x="space-between" role="banner" label="Top bar">
-      <row gap={8} y="center" flexShrink={1} minWidth={0}>
+    <row
+      minHeight={48}
+      flexShrink={0}
+      paddingLeft={16}
+      paddingRight={12}
+      paddingY={10}
+      columnGap={8}
+      rowGap={8}
+      y="center"
+      flexWrap="wrap"
+      role="banner"
+      label="Top bar">
+      <row gap={8} y="center" flexGrow={1} flexShrink={1} flexBasis={160} minWidth={0} marginRight={4}>
         {inputs.menu.pipe(
           map(menu =>
             menu === true
               ? [
-                  <Button key="menu" label="Menu" description={'Mod+\\'} size="small" variant="plain" flexShrink={0} onClick={() => inputs.onMenu.value?.()}>
+                  <Button
+                    key="menu"
+                    label="Menu"
+                    description={'Mod+\\'}
+                    size="small"
+                    variant="plain"
+                    flexShrink={0}
+                    onClick={() => inputs.onMenu.value?.()}>
                     <text text="Menu" fontSize={12} color="text" />
                   </Button>
                 ]
@@ -78,39 +101,48 @@ export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, 
         )}
         <text text={place.pipe(map(p => p.title))} fontSize={14} fontWeight={600} color="text" maxLines={1} textOverflow="ellipsis" flexShrink={1} />
       </row>
-      <row gap={8} y="center" flexShrink={0}>
-        {/* One switcher whose value follows the url, hidden off team pages, rather than a new one per team. */}
-        <box visible={place.pipe(map(p => p.team !== null))}>
-          <SegmentedControl
-            label="Layout"
-            size="small"
-            value={place.pipe(map(p => p.view ?? 'list'))}
-            onChange={next => {
-              const team = place.value?.team;
-              if (team) router.navigate(`/team/${team}/${next}`);
-            }}
-            options={[
-              { value: 'list', label: 'List' },
-              { value: 'board', label: 'Board' }
-            ]}
-          />
-        </box>
-        <Button label="New issue" description="C" size="small" onClick={() => (newIssue.open.value = true)}>
-          <text text="New issue" fontSize={12} color="background" />
-        </Button>
-        <Button
-          label={issues.view.undoLabel.pipe(map(label => (label === null ? 'Nothing to undo' : `Undo: ${label}`)))}
-          disabled={issues.view.undoLabel.pipe(map(label => label === null))}
-          size="small"
-          variant="plain"
-          onClick={() => issues.send.undo()}>
-          <text text="Undo" fontSize={12} color="text" />
-        </Button>
-        {/* The way to find the shortcuts besides the palette, and a hint that `?` opens it. */}
-        <Button label={KEYBOARD_SHORTCUTS} description="?" size="small" variant="plain" onClick={() => (keys.sheetOpen.value = true)}>
-          <text text="?" fontSize={12} fontWeight={600} color="textMuted" />
-        </Button>
-      </row>
+      {/* One switcher whose value follows the url, built on the way onto
+          a team page rather than once per team. Off them it's taken out
+          rather than hidden, which would keep its room in the row. */}
+      {place.pipe(
+        map(p => p.team !== null),
+        distinctUntilChanged(),
+        map(onTeam =>
+          onTeam
+            ? [
+                <SegmentedControl
+                  key="layout"
+                  label="Layout"
+                  size="small"
+                  value={place.pipe(map(p => p.view ?? 'list'))}
+                  onChange={next => {
+                    const team = place.value?.team;
+                    if (team) router.navigate(`/team/${team}/${next}`);
+                  }}
+                  options={[
+                    { value: 'list', label: 'List' },
+                    { value: 'board', label: 'Board' }
+                  ]}
+                />
+              ]
+            : []
+        )
+      )}
+      <Button label="New issue" description="C" size="small" onClick={() => (newIssue.open.value = true)}>
+        <text text="New issue" fontSize={12} color="background" />
+      </Button>
+      <Button
+        label={issues.view.undoLabel.pipe(map(label => (label === null ? 'Nothing to undo' : `Undo: ${label}`)))}
+        disabled={issues.view.undoLabel.pipe(map(label => label === null))}
+        size="small"
+        variant="plain"
+        onClick={() => issues.send.undo()}>
+        <text text="Undo" fontSize={12} color="text" />
+      </Button>
+      {/* The way to find the shortcuts besides the palette, and a hint that `?` opens it. */}
+      <Button label={KEYBOARD_SHORTCUTS} description="?" size="small" variant="plain" onClick={() => (keys.sheetOpen.value = true)}>
+        <text text="?" fontSize={12} fontWeight={600} color="textMuted" />
+      </Button>
     </row>
   );
 }

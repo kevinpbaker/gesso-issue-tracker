@@ -94,12 +94,23 @@ and 400% of a 1280-pixel window (640 and 320 CSS pixels):
   Escape, Close or choosing a page brings the page back.
 - **On an issue,** the properties go under the issue instead of beside
   it.
-- **On the list,** the summary row wraps its controls and the page title
-  truncates rather than running under the buttons.
+- **The top bar** wraps: where its controls don't fit beside the
+  breadcrumb, they go onto a line under it, and the breadcrumb keeps
+  room to be read and truncates past that.
+- **On the list,** the summary row and the filter bar wrap their
+  controls, and the page title truncates rather than running under the
+  buttons. Each issue is two lines below 540 pixels: its key and title,
+  then its status, when it changed and its labels.
+- **The command palette and the dialogs** keep 16 pixels each side and
+  are no wider than what's between. The New issue dialog's properties
+  wrap, two to a line or one, with its buttons under the switch.
 - **The board** scrolls sideways. A board is two-dimensional, which
   WCAG's reflow criterion exempts.
 
-`src/app/shell.spec.tsx` checks the narrow layout at 320 pixels.
+`src/app/shell.spec.tsx` checks the narrow layout at 320 pixels: that
+each control of the top bar, the palette, the New issue dialog, a list
+row and the filter bar is inside the window and clear of its
+neighbours.
 
 ## Reduced motion
 

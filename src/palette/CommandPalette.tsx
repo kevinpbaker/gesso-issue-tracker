@@ -1,7 +1,7 @@
 import { BehaviorSubject, combineLatest } from 'rxjs';
 import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { autoFocus, type UiChild, type UiKeyboardEvent, type UiNode } from 'gesso-core';
+import { autoFocus, percent, type UiChild, type UiKeyboardEvent, type UiNode } from 'gesso-core';
 import { useOverlay } from 'gesso-components';
 import { FocusService, RouterService, ScrollService, type ComponentContext, type Inputs } from 'gesso-framework';
 
@@ -119,6 +119,11 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     overlay.show(body(), {
       top: 80,
       center: 'x',
+      // Room each side on a screen narrower than the palette, which is
+      // then as wide as what's between (a phone, or a window zoomed to
+      // 400%), rather than centred off both edges.
+      left: 16,
+      right: 16,
       environment: placeholder,
       dismissOnOutsidePress: true,
       // A dialog that holds the keyboard, so the page behind it is dimmed
@@ -164,6 +169,7 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
       role="dialog"
       label="Command palette"
       width={560}
+      maxWidth={percent(100)}
       backgroundColor="surface"
       borderColor="border"
       borderWidth={1}

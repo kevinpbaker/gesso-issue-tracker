@@ -1,7 +1,19 @@
 import { combineLatest, type Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
-import { autoFocus, focusRing, interactive, LazyColumn, percent, scrollPosition, shortcut, type UiNode } from 'gesso-core';
+import {
+  autoFocus,
+  containerBands,
+  focusRing,
+  interactive,
+  LazyColumn,
+  percent,
+  scrollPosition,
+  shortcut,
+  sizeContainer,
+  UiContainerSizeSource,
+  type UiNode
+} from 'gesso-core';
 import { Button, Select } from 'gesso-components';
 import { FocusService, formatUrl, internalState, RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
@@ -44,6 +56,12 @@ import { triageKeys } from './triageKeys';
  */
 
 export const ROW = 40;
+/**
+ * The list's width from which a row has room for its columns. Below it
+ * (a phone, or a window zoomed to 400%) each row is two lines: the key
+ * and title, then the status, when it changed and the labels.
+ */
+const WIDE_ROW = 540;
 /** Rows a list can plausibly show at once; the service adds overscan. */
 const VISIBLE = 40;
 
@@ -352,6 +370,11 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     }
   });
 
+  // The rows' layout follows the list's width, read once here rather
+  // than measured by every row.
+  const room = new UiContainerSizeSource();
+  const compact = containerBands(room, [WIDE_ROW]).pipe(map(band => band < WIDE_ROW));
+
   let listNode: UiNode | null = null;
   const list = LazyColumn(
     {
@@ -396,6 +419,7 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
           index={located.index}
           total={issues.view.summary.pipe(map(summary => summary.total))}
           cursor={cursor}
+          compact={compact}
           track={trackRow}
           onOpen={() => open(located.index)}
           onToggle={() => toggle(located.index)}
@@ -408,7 +432,9 @@ export function IssueList(inputs: Inputs<{ query: IssueQuery; empty?: string }>,
     <column
       width={percent(100)}
       height={percent(100)}
+      containerSize={room}
       modifiers={[
+        sizeContainer({ source: room }),
         key('j', 'Next issue', () => move(1, false)),
         key('ArrowDown', 'Next issue', () => move(1, false)),
         key('k', 'Previous issue', () => move(-1, false)),
@@ -540,6 +566,8 @@ function IssueRowView(
     index: number;
     total: number;
     cursor: number;
+    /** Two lines rather than columns, for a narrow list. */
+    compact: boolean;
     track: (index: number, node: UiNode | null) => void;
     onOpen: () => void;
     onToggle: () => void;
@@ -585,7 +613,7 @@ function IssueRowView(
       x="stretch"
       y="stretch"
       modifiers={[HOVER]}>
-      <row gap={12} y="center">
+      <row gap={inputs.compact.pipe(map(narrow => (narrow ? 8 : 12)))} y="center">
         <box width={3} height={24} flexShrink={0} borderRadius={2} backgroundColor={atCursor.pipe(map(here => (here ? 'primary' : 'background')))} />
         <button
           // A target for the pointer; the keyboard selects with x, and the
@@ -613,22 +641,45 @@ function IssueRowView(
         <box flexShrink={0}>
           <PriorityIcon priority={field(r => r.priority, 0)} />
         </box>
-        <box width={72} flexShrink={0}>
-          <text text={field(r => r.key, '')} fontSize={12} color="textMuted" maxLines={1} />
-        </box>
-        {/* The title keeps at least 140 px; labels give way first. */}
-        <box flexGrow={1} flexShrink={1} flexBasis={0} minWidth={140}>
-          <text text={field(r => r.title, '')} fontSize={13} color="text" maxLines={1} textOverflow="ellipsis" />
-        </box>
-        <box flexShrink={1} minWidth={0} maxWidth={180} overflow="hidden" x="stretch">
-          <text text={field(r => r.labels.join(' · '), '')} fontSize={11} color="textMuted" maxLines={1} textOverflow="ellipsis" />
-        </box>
-        <box width={88} flexShrink={0}>
-          <text text={field(r => r.stateName, '')} fontSize={11} color="textMuted" maxLines={1} />
-        </box>
-        <box width={44} flexShrink={0} x="end">
-          <text text={field(r => ago(r.updatedAt), '')} fontSize={11} color="textMuted" maxLines={1} />
-        </box>
+        {inputs.compact.pipe(
+          distinctUntilChanged(),
+          map(narrow =>
+            narrow
+              ? [
+                  <column key="lines" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0} gap={2}>
+                    <row gap={8} y="center">
+                      <text text={field(r => r.key, '')} fontSize={12} color="textMuted" maxLines={1} flexShrink={0} />
+                      <text text={field(r => r.title, '')} fontSize={13} color="text" maxLines={1} textOverflow="ellipsis" flexShrink={1} minWidth={0} />
+                    </row>
+                    <text
+                      text={field(r => [r.stateName, ago(r.updatedAt), ...r.labels].join(' · '), '')}
+                      fontSize={11}
+                      color="textMuted"
+                      maxLines={1}
+                      textOverflow="ellipsis"
+                    />
+                  </column>
+                ]
+              : [
+                  <box key="key" width={72} flexShrink={0}>
+                    <text text={field(r => r.key, '')} fontSize={12} color="textMuted" maxLines={1} />
+                  </box>,
+                  // The title keeps at least 140 px; labels give way first.
+                  <box key="title" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={140}>
+                    <text text={field(r => r.title, '')} fontSize={13} color="text" maxLines={1} textOverflow="ellipsis" />
+                  </box>,
+                  <box key="labels" flexShrink={1} minWidth={0} maxWidth={180} overflow="hidden" x="stretch">
+                    <text text={field(r => r.labels.join(' · '), '')} fontSize={11} color="textMuted" maxLines={1} textOverflow="ellipsis" />
+                  </box>,
+                  <box key="state" width={88} flexShrink={0}>
+                    <text text={field(r => r.stateName, '')} fontSize={11} color="textMuted" maxLines={1} />
+                  </box>,
+                  <box key="updated" width={44} flexShrink={0} x="end">
+                    <text text={field(r => ago(r.updatedAt), '')} fontSize={11} color="textMuted" maxLines={1} />
+                  </box>
+                ]
+          )
+        )}
         <box width={24} height={24} borderRadius={12} backgroundColor="controlBackground" x="center" y="center" flexShrink={0}>
           <text text={field(r => r.initials, '')} fontSize={10} fontWeight={600} color="textMuted" />
         </box>

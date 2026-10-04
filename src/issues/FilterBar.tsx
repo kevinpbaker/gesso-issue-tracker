@@ -157,6 +157,10 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
         values={values}
         onValuesChange={next => change(next.length === 0 ? without(current(), dimension) : write(next))}
         width={220}
+        // Narrower than 220 where the bar is (a phone, or a window zoomed
+        // to 400%), rather than pushing the filter's × off the edge.
+        flexShrink={1}
+        minWidth={0}
         rootModifiers={focus}
       />
     );
@@ -195,8 +199,8 @@ export function FilterBar(inputs: Inputs<{ filter: IssueFilter; onChange: (filte
         break;
     }
     return (
-      <row key={dimension} gap={4} y="start" padding={4} borderRadius={8} backgroundColor="surface" role="group" label={`${name} filter`}>
-        <text text={name} fontSize={12} color="textMuted" paddingTop={8} paddingLeft={4} />
+      <row key={dimension} gap={4} y="start" padding={4} borderRadius={8} backgroundColor="surface" flexShrink={1} minWidth={0} role="group" label={`${name} filter`}>
+        <text text={name} fontSize={12} color="textMuted" paddingTop={8} paddingLeft={4} flexShrink={0} />
         {body}
         <Button
           size="small"
