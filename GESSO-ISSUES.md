@@ -787,6 +787,40 @@ each issue stepped to at its top, drawn where it stays from its first
 frame", which reads every frame from the step on. Docs: focus and
 traps, "Autofocus".
 
+### 62. A popup couldn't open at a character in a field
+
+**What:** the editor's mention and issue-reference lists belong under
+the `@` or the key that opened them, in a paragraph as wide as the
+page. Anchored to the block's field, the list sat at the field's left
+edge whatever line the `@` was on. Gesso's documented way to put
+something at the caret was a point worked out from
+`EditingService.caretRectOf`, but a point doesn't follow its anchor, so
+the list stayed behind when the issue page scrolled, and the caret's
+rectangle was only the caret's, which moves on as the name is typed.
+
+**Fix:** `anchorRect` on an overlay entry, on `useOverlay`'s options
+and as a layout property: a rectangle in the anchor's own coordinates
+that the entry is placed against, with the same flip and shift, and
+followed through scrolling and layout like the anchor. It can be an
+Observable, so the list moves with its word when the word wraps,
+without opening again. `caretRectOf(node, offset)` answers for any
+character (`6b71716`). Specs: `LayoutEngine.position.spec.ts`, "places
+beside a part of its anchor, and follows it through scrolling";
+`Overlays.spec.ts`, "opens under the character and moves with it,
+without opening again"; `UiEditingController.selection.spec.ts` and
+`EditingService.spec.ts` for the offset. In the tracker:
+`MarkdownEditor.spec.tsx`, "opens under the @, wherever it is on the
+line, and follows it when the word wraps". Docs: positioning and
+overlays, "Anchored placement"; text input, "Putting something at the
+caret". Checked with the core, framework and components tests (one
+failure, in another session's unfinished dialog work), types, the API
+reports and the docs check.
+
+**Not Gesso's:** a press on an option's text started a canvas text
+selection, which takes focus out of the field first, so the pick
+never landed. Gesso's own lists opt out with `selectable={false}`, and
+so does the editor's now.
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker
