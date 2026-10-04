@@ -82,6 +82,8 @@ a person does.
 - **Remove from parent:** focus goes to the Parent field.
 - **The New issue dialog and the palette** hand focus back to whatever
   had it.
+- **The sidebar on a narrow window,** put away with Escape or Close:
+  focus goes back to the Menu button that opened it.
 
 ## Zoom and reflow
 

@@ -2,6 +2,7 @@ import { BehaviorSubject, combineLatest } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 
 import { Button, SegmentedControl } from 'gesso-components';
+import type { UiNode } from 'gesso-core';
 import { RouterService, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { Issues } from '../issues/IssuesContract';
@@ -48,8 +49,12 @@ export function placeOf(
   return { title: '', team: null, view: null };
 }
 
-/** `menu` is true while the sidebar isn't beside the page: a Menu button then opens it. */
-export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, ctx: ComponentContext) {
+/**
+ * `menu` is true while the sidebar isn't beside the page: a Menu button
+ * then opens it, and `menuRef` is handed that button, for the keyboard
+ * to go back to when the sidebar is put away.
+ */
+export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void; menuRef?: (node: UiNode | null) => void }>, ctx: ComponentContext) {
   const router = ctx.inject(RouterService);
   const meta = ctx.channel(WorkspaceMeta);
   const issues = ctx.channel(Issues);
@@ -87,6 +92,7 @@ export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, 
               ? [
                   <Button
                     key="menu"
+                    ref={(node: UiNode | null) => inputs.menuRef.value?.(node)}
                     label="Menu"
                     description={'Mod+\\'}
                     size="small"

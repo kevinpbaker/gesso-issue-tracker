@@ -11,10 +11,11 @@ import {
   sizeContainer,
   UiContainerSizeSource,
   withContrast,
-  type UiChild
+  type UiChild,
+  type UiNode
 } from 'gesso-core';
 import { SegmentedControl, SplitPane, type SplitPaneProps } from 'gesso-components';
-import { RouterService, ShellService, type ComponentContext, type Inputs, type OutletProps } from 'gesso-framework';
+import { FocusService, RouterService, ShellService, type ComponentContext, type Inputs, type OutletProps } from 'gesso-framework';
 
 import { Issues } from '../issues/IssuesContract';
 import { Preferences, type ThemeChoice } from './PreferencesContract';
@@ -49,6 +50,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   const issues = ctx.channel(Issues);
   const shell = ctx.inject(ShellService);
   const router = ctx.inject(RouterService);
+  const focus = ctx.inject(FocusService);
   const keys = ctx.inject(ShortcutsService);
   const { registry } = keys;
   const newIssue = ctx.inject(NewIssueService);
@@ -122,6 +124,14 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   ctx.effect(router.url, () => drawer.next(false));
   ctx.effect(narrowNow, narrow => !narrow && drawer.next(false));
   const closeDrawer = () => drawer.next(false);
+  // Put away with Escape or Close, the sidebar hands the keyboard back to
+  // the Menu button that opened it, as a dialog hands it back to what
+  // opened it. Choosing a page doesn't: the page takes it.
+  let menuButton: UiNode | null = null;
+  const putAway = (): void => {
+    closeDrawer();
+    if (menuButton !== null) focus.focus(menuButton);
+  };
   const show = combineLatest([narrowNow, drawer, prefs.view.sidebarOpen]).pipe(
     map(([narrow, open, sidebar]): SplitPaneShow => (narrow ? (open ? 'first' : 'second') : sidebar ? 'both' : 'second')),
     distinctUntilChanged()
@@ -131,7 +141,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
     // minWidth 0: without it a board five columns wide sets the pane's
     // minimum, and the pane pushes the top bar's controls off screen.
     <column flexGrow={1} minWidth={0} width={percent(100)} height={percent(100)} x="stretch" role="main" label="Main">
-      <TopBar menu={narrowNow} onMenu={() => drawer.next(true)} />
+      <TopBar menu={narrowNow} onMenu={() => drawer.next(true)} menuRef={node => (menuButton = node)} />
       <NewIssueDialog open={newIssue.open} onClose={() => (newIssue.open.value = false)} />
       <CommandPalette />
       <ShortcutSheet />
@@ -192,7 +202,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
           min={0.12}
           max={0.4}
           show={show}
-          first={<Sidebar drawer={drawer} onClose={closeDrawer} />}
+          first={<Sidebar drawer={drawer} onClose={putAway} />}
           second={main}
         />
       </row>

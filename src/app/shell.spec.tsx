@@ -225,6 +225,15 @@ describe('at 320 CSS pixels, a window zoomed to 400%', () => {
     ui.fireEvent.press('Escape');
     await settle();
     expect(ui.getByRole('main', { name: 'Main' })).toBeDefined();
+    // The keyboard goes back to the Menu button that opened it, from
+    // Escape and from Close alike.
+    expect(ui.runtime.input.focus.focusedNode).toBe(ui.getByRole('button', { name: 'Menu' }));
+    ui.fireEvent.press('Enter');
+    await settle();
+    expect(ui.queryByRole('main', { name: 'Main' })).toBeNull();
+    ui.fireEvent.click(ui.getByRole('button', { name: 'Close the sidebar' }));
+    await settle();
+    expect(ui.runtime.input.focus.focusedNode).toBe(ui.getByRole('button', { name: 'Menu' }));
     // Choosing a destination closes it too.
     ui.fireEvent.click(ui.getByRole('button', { name: 'Menu' }));
     await settle();
