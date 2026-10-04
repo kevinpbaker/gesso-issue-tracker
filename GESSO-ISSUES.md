@@ -4,7 +4,7 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `fac08c0` (another session's commits are
+per fix, `2c572e3` through `3896cea` (another session's commits are
 interleaved in the same range). Not released. Another session working in
 the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
 nothing. Every
@@ -787,6 +787,21 @@ each issue stepped to at its top, drawn where it stays from its first
 frame", which reads every frame from the step on. Docs: focus and
 traps, "Autofocus".
 
+### 61. A menu bar couldn't show which setting was on
+
+**What:** found in gessosheet, not the tracker. Its View menu needed a
+Light / Dark / Match system choice, and `MenuBar` drew every row as a
+plain `menuitem`: no tick, and nothing a screen reader could read as
+"checked". The only way round it was putting a tick in the label.
+
+**Fix:** `MenuBar` takes `checkedOf`. True draws a tick, false leaves
+its place empty, and undefined keeps a plain action. A menu with any
+setting in it keeps a tick column on every row, and those rows are
+`menuitemcheckbox` with the `checked` state (`28a971e`). Spec:
+`MenuBar.spec.ts`. Docs: menu bar, "A setting gets a tick". Checked
+with the components package's 466 tests, types, lint, format, the API
+report and the docs check.
+
 ### 62. A popup couldn't open at a character in a field
 
 **What:** the editor's mention and issue-reference lists belong under
@@ -820,6 +835,86 @@ reports and the docs check.
 selection, which takes focus out of the field first, so the pick
 never landed. Gesso's own lists opt out with `selectable={false}`, and
 so does the editor's now.
+
+### 63. A shortcut on `?` matched no keyboard
+
+**What:** the keyboard shortcut sheet opens on `?`. Every layout types
+`?` with Shift (Shift+/ in the US, Shift+ß in Germany, Shift+, in
+France), and the registry compared Shift exactly, so `keys: '?'` never
+fired. `'Shift+?'` worked only where Shift, not AltGr, typed it, and it
+printed as `⇧?`.
+
+**Fix:** a shortcut on punctuation, a digit or a symbol matches the
+character the press produced: Shift isn't asked about, and a bare
+symbol also takes AltGr (Control and Alt, or Option on a Mac). Letters
+keep their Shift, so `Shift+L` and `l` stay apart (`db7040b`). Spec:
+`UiShortcuts.spec.ts`, "matches a symbol on the character, however the
+layout reaches it". In the tracker: `shell.spec.tsx`, "opens on ?
+however the layout types it". Docs: shortcuts, "Symbols".
+
+### 64. A help sheet couldn't draw a shortcut as keys, or say it
+
+**What:** the registry's docs promise a help sheet, but a binding's
+`display` is one joined string (`⇧⌘K`, `Ctrl+Shift+K`), which can't be
+split back into caps (`Mod++`, `Space`), and its symbols aren't
+something to name a row with: screen readers read `⌘` and `↓`
+inconsistently, and skip `?` at their default verbosity.
+
+**Fix:** `shortcutKeyCaps(steps)` gives the keys one at a time, one
+array per press, and `formatShortcut` now joins those same pieces;
+`describeShortcut(steps)` says them in words: `Shift Command K`,
+`Down arrow`, `Question mark`, `g then d` (`13c096f`). Spec:
+`UiShortcuts.spec.ts`, "splits a shortcut into key caps" and "says a
+shortcut in words". Docs: shortcuts, "A help sheet".
+
+### 65. Every reload after saving a service failed until a restart
+
+**What:** adding state to `ShortcutsService` while the dev server ran
+left the app showing "Service 'ShortcutsService' is not registered. A
+different class of that name is registered", on every reload, until
+the dev server restarted. The render worker entry accepts its
+services' modules (the plugin's hot-replacement wiring), and Vite
+leaves a module that accepts an update importing the module at the
+timestamp from before the save, while every other importer moves on:
+the reloaded page ran two copies of the service's module.
+
+**Fix:** the plugin's `hotUpdate` marks the worker entry stale, softly,
+when a module it accepts changes, so its imports move on too
+(`4958693`). Spec: `vite-plugin/src/hmr.spec.ts`, against a real dev
+server. Docs: hot module replacement, "Hand over the services the
+module defines".
+
+### 66. An open dialog kept the theme it opened with
+
+**What:** pick Light and press `?` or `c` at once, and the dialog came
+up dark over a light page: the theme comes back from the app worker a
+moment later, and the overlay layer read the theme, text style and
+content colour once, when an entry opened. A dialog open while the
+system turned dark stayed light the same way.
+
+**Fix:** the layer's entry box follows its environment node and
+re-provides the three when they change. For that, a modifier host can
+read and follow another node's environment (`environment(key, of?)`,
+`onEnvironment(listener, of?)`), and the graph rebuilds in the same
+frame an environment a listener dirtied while environments were being
+rebuilt; before, that flag was swept up with the frame's dirty set and
+the rebuild never ran (`581cf89`). Spec: `components/src/overlayTheme.spec.ts`.
+Docs: positioning and overlays; modifiers.
+
+### 67. A dialog wider than a phone ran off both sides
+
+**What:** the shortcut sheet is 520 pixels wide; on a 375 pixel phone
+its title and keys ran off both edges. `Dialog`'s `width` was its
+width whatever the screen. The new issue dialog had the same problem.
+
+**Fix:** the dialog's entry keeps a 16 pixel margin each side and the
+dialog is at most as wide as the space between (`3896cea`). Spec:
+`Dialog.spec.ts`, "fits a dialog wider than the screen inside it".
+Docs: dialog.
+
+Checked, for 63 to 67: the core, framework, components and vite-plugin
+tests (3,934 across the first three), types, format, the API reports
+and the docs check.
 
 ### Tooling
 
