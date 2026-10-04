@@ -1,7 +1,7 @@
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { percent, shortcuts } from 'gesso-core';
+import { percent, shortcuts, type UiNode } from 'gesso-core';
 import { createComponent, route, RouterService, ServiceRegistry, type ComponentContext, type Inputs } from 'gesso-framework';
 import { renderTest, serveForTest, type Rendered, type ServedForTest } from 'gesso-testing';
 
@@ -295,6 +295,35 @@ describe('display positions', () => {
       const at = locate(summary, positionOf(summary, index));
       expect(at).toEqual({ kind: 'issue', index });
     }
+  });
+});
+
+describe('the issue list from the pointer', () => {
+  /** Each row's tick box, top to bottom: pointer targets with no role of their own. */
+  const tickBoxes = (): UiNode[] => {
+    const found: UiNode[] = [];
+    const walk = (node: UiNode): void => {
+      const label = node.properties.get('label');
+      if (label === 'Select' || label === 'Deselect') found.push(node);
+      for (let child = node.firstChild; child !== null; child = child.nextSibling) walk(child);
+    };
+    walk(h.ui.runtime.debugRoot());
+    return found;
+  };
+
+  it('selects with a row\'s tick box and stays on the list, where the row itself opens the issue', async () => {
+    await mount();
+    const url = () => h.ui.runtime.services.get(RouterService).url.value;
+    const before = url();
+    h.ui.fireEvent.click(tickBoxes()[2]!);
+    await settle();
+    expect(url()).toBe(before);
+    expect(h.service.selectedIds()).toHaveLength(1);
+    // And again, to take it off.
+    h.ui.fireEvent.click(tickBoxes()[2]!);
+    await settle();
+    expect(url()).toBe(before);
+    expect(h.service.selectedIds()).toHaveLength(0);
   });
 });
 

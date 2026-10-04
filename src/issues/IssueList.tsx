@@ -593,7 +593,12 @@ function IssueRowView(
           focusable={false}
           label={selected.pipe(map(on => (on ? 'Deselect' : 'Select')))}
           states={selected.pipe(map(on => (on ? ['checked'] : [])))}
-          onClick={() => inputs.onToggle.value()}
+          // The row opens the issue on a click, and a click here would
+          // reach it too: ticking the box selects and nothing more.
+          onClick={event => {
+            event.stopPropagation();
+            inputs.onToggle.value();
+          }}
           width={16}
           height={16}
           flexShrink={0}
