@@ -95,15 +95,22 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     if (overlay.isOpen()) return;
     // What's live depends on where focus is, so it's read before the
     // palette takes focus for itself.
+    // A command a screen offers that is also a shortcut is listed once,
+    // as the shortcut, with the command's words and, if the shortcut has
+    // none, its heading: the shell offers "Keyboard shortcuts" under Help
+    // so that "help" finds it.
+    const offered = service.commands();
+    const byLabel = new Map(offered.map(command => [command.label, command]));
     const shortcuts: PaletteCommand[] = registry.active(focus.focused.value).map(binding => ({
       id: `keys:${binding.keys}:${binding.label}`,
       label: binding.label,
-      group: binding.group ?? 'Shortcuts',
+      group: binding.group ?? byLabel.get(binding.label)?.group ?? 'Shortcuts',
+      keywords: byLabel.get(binding.label)?.keywords,
       keys: binding.display,
       run: binding.run
     }));
     const labels = new Set(shortcuts.map(command => command.label));
-    const all = [...shortcuts, ...service.commands().filter(command => !labels.has(command.label))];
+    const all = [...shortcuts, ...offered.filter(command => !labels.has(command.label))];
     commands = new Map(all.map(command => [command.id, command]));
     palette.send.setCatalog(all.map(({ id, label, group, keywords }) => ({ id, label, group, keywords })));
     palette.send.setOpenIssue(openIssue(router.url.value));
