@@ -136,8 +136,6 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
     });
   };
 
-  ctx.effect(service.open.pipe(distinctUntilChanged()), open => (open ? show() : close()));
-
   const onKeyDown = (event: UiKeyboardEvent): void => {
     const consume = (): void => {
       event.preventDefault();
@@ -239,6 +237,11 @@ export function CommandPalette(_inputs: Inputs<{}>, ctx: ComponentContext) {
       </scrollview>
     </column>
   );
+
+  // Subscribed last: a palette mounted while the service already says
+  // open shows at once, and `show` needs `body` and the key handler it
+  // uses, declared above.
+  ctx.effect(service.open.pipe(distinctUntilChanged()), open => (open ? show() : close()));
 
   return <box ref={(node: UiNode | null) => (placeholder = node)} width={0} height={0} />;
 }

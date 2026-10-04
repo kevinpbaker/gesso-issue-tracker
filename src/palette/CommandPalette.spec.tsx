@@ -1,4 +1,5 @@
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { percent, shortcut, shortcuts } from 'gesso-core';
@@ -231,5 +232,29 @@ describe('the command palette', () => {
     expect(h.copied).toEqual([link, link]);
     await press('Enter');
     expect(h.ui.runtime.services.get(RouterService).url.value).toBe(`/issue/${key}`);
+  });
+});
+
+describe('a palette mounted while it is asked for', () => {
+  it('opens, rather than reaching for its body before the body is declared', async () => {
+    // A palette built again while the service says open, as the shell's
+    // used to be when a resize rebuilt the page, opens at once.
+    const shown = new BehaviorSubject(false);
+    function Late(_inputs: Inputs<{}>, _ctx: ComponentContext) {
+      return <column width={percent(100)} height={percent(100)}>{shown.pipe(map(on => (on ? [<CommandPalette key="palette" />] : [])))}</column>;
+    }
+    await mount();
+    const services = new ServiceRegistry();
+    services.register(ShortcutsService);
+    services.register(CommandsService);
+    const late = renderTest(createComponent(Late), { channels: h.served.registry, width: 1000, height: 700, services });
+    try {
+      late.runtime.services.get(CommandsService).open.value = true;
+      shown.next(true);
+      await late.settle();
+      expect(late.queryByRole('dialog', { name: 'Command palette' })).not.toBeNull();
+    } finally {
+      late.unmount();
+    }
   });
 });
