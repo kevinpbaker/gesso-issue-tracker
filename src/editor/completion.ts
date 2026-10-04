@@ -2,6 +2,8 @@ import type { Observable } from 'rxjs';
 
 import { filterCombobox } from 'gesso-components';
 
+import { keyStart, wordStart } from './inline';
+
 /**
  * Completing a mention or an issue reference as it's typed.
  *
@@ -61,22 +63,21 @@ export interface Trigger {
 /** How many suggestions the list shows. */
 export const SHOWN = 8;
 
-/** A word starts where the character before isn't a letter or a digit, as `inline.ts` decides. */
-const atBoundary = (text: string, at: number): boolean => at === 0 || !/[A-Za-z0-9]/.test(text[at - 1]!);
-
 /**
  * The completion the character just typed opens, if any: `@` at the
- * start of a word, or the dash after a team key that starts one. Only a
- * character typed opens a list; text pasted or moved past does not.
+ * start of a word, or the dash after a team key where a key can start
+ * (`wordStart` and `keyStart`, as `inline.ts` draws them: `@WEB-` is a
+ * mention being typed, not a reference). Only a character typed opens
+ * a list; text pasted or moved past does not.
  */
 export function triggerAt(text: string, caret: number, prefixes: readonly string[]): Trigger | null {
   const typed = text[caret - 1];
-  if (typed === '@' && atBoundary(text, caret - 1)) {
+  if (typed === '@' && wordStart(text, caret - 1)) {
     return { kind: 'mention', start: caret - 1, opener: '@' };
   }
   if (typed === '-') {
     const match = /([A-Z]{2,5})-$/.exec(text.slice(0, caret));
-    if (match !== null && prefixes.includes(match[1]!) && atBoundary(text, match.index)) {
+    if (match !== null && prefixes.includes(match[1]!) && keyStart(text, match.index)) {
       return { kind: 'reference', start: match.index, opener: match[0] };
     }
   }

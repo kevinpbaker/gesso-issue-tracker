@@ -47,7 +47,7 @@ import {
   type Block
 } from './markdown';
 import { pastedBlocks, pastedMarkdown } from './paste';
-import { applySlash, filterSlash, slashQuery, type SlashItem } from './slash';
+import { applySlash, filterSlash, SLASH_ITEMS, slashQuery, type SlashItem } from './slash';
 
 /**
  * A rich text editor for markdown, drawn by Gesso.
@@ -247,10 +247,21 @@ interface CompletionState {
   readonly index: number;
 }
 
-/** What a block's field says about the list open over it: a combobox, and the option the highlight is on. */
+/**
+ * What a block's field says about the list open over it, the slash menu
+ * or a mention or reference list: it's a combobox, it controls that
+ * list, and the highlight is on that option.
+ */
 interface Popup {
+  readonly list: UiNode | null;
   readonly active: UiNode | null;
 }
+
+/** Which of the editor's lists a node belongs to. */
+type PopupMenu = 'slash' | 'completion';
+
+/** Hands a list's nodes to the editor: `list` for the listbox, an option's value for the option. */
+type ListRef = (key: string) => (node: UiNode | null) => void;
 
 /** What a block needs from the document around it, as cells. */
 interface Context {
@@ -344,7 +355,11 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const query = queryAfter(text, caret, open.trigger);
       if (query === null) closeCompletion();
       else if (query !== open.query) completeWith(open, query, open.index);
-      return;
+      // The character that ended one list can open the next: the dash
+      // of `@kim WEB-`, the second `@` of `@kim @ada`.
+      if (completion.value !== null) {
+        return;
+      }
     }
     if (!typed || completions === undefined) {
       return;
@@ -368,26 +383,48 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     }
     return cell;
   };
-  /** The options' nodes, by value, for the field's active descendant. */
-  const optionNodes = new Map<string, UiNode>();
-  const optionsChanged = new BehaviorSubject(0);
+  /** The open lists' nodes, `<menu>:list` and `<menu>:<value>`, for the field's `controls` and active descendant. */
+  const listNodes = new Map<string, UiNode>();
+  const listNodesChanged = new BehaviorSubject(0);
+  /** A ref keeping one of a menu's nodes in `listNodes`; one going away takes out only itself, not a node that replaced it. */
+  const listRef =
+    (menu: PopupMenu): ListRef =>
+    key => {
+      let mine: UiNode | null = null;
+      return node => {
+        if (node !== null) listNodes.set(`${menu}:${key}`, node);
+        else if (mine !== null && listNodes.get(`${menu}:${key}`) === mine) listNodes.delete(`${menu}:${key}`);
+        mine = node;
+        listNodesChanged.next(listNodesChanged.value + 1);
+      };
+    };
+  /** The list open over a block, whichever menu it is: its block, and the value of the option the highlight is on. */
+  const openList = (): { readonly id: string; readonly menu: PopupMenu; readonly option: string | undefined } | null => {
+    const listed = completion.value;
+    if (listed !== null) {
+      return { id: listed.id, menu: 'completion', option: listed.items[listed.index]?.value };
+    }
+    const menuOpen = slash.value;
+    return menuOpen === null ? null : { id: menuOpen.id, menu: 'slash', option: filterSlash(menuOpen.query)[menuOpen.index]?.value };
+  };
   let popupOn: string | null = null;
   const syncPopup = (): void => {
-    const open = completion.value;
+    const open = openList();
     if (popupOn !== null && popupOn !== open?.id) {
       popupCells.get(popupOn)?.next(null);
     }
     popupOn = open?.id ?? null;
     if (open !== null) {
       popupOf(open.id);
-      const item = open.items[open.index];
-      const active = item === undefined ? null : (optionNodes.get(item.value) ?? null);
+      const list = listNodes.get(`${open.menu}:list`) ?? null;
+      const active = open.option === undefined ? null : (listNodes.get(`${open.menu}:${open.option}`) ?? null);
       const cell = popupCells.get(open.id)!;
-      if (cell.value?.active !== active || cell.value === null) cell.next({ active });
+      if (cell.value === null || cell.value.list !== list || cell.value.active !== active) cell.next({ list, active });
     }
   };
   ctx.effect(completion, syncPopup);
-  ctx.effect(optionsChanged, syncPopup);
+  ctx.effect(slash, syncPopup);
+  ctx.effect(listNodesChanged, syncPopup);
 
   // Everything the views read, worked out from one document state at a
   // time. Separate streams over \`blocks\` update in subscription order,
@@ -840,6 +877,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       const made = applySlash(current, value);
       const target = made.find(b => b.type !== 'rule') ?? made[0]!;
       commit(replaced(index, made), { id: target.id, offset: 0 }, 'shortcut', here(current.id, current.text.length));
+      announcement.value = `Turned into ${SLASH_ITEMS.find(item => item.value === value)?.label ?? value}`;
     },
     toggleSource() {
       if (mode.value === 'rich') {
@@ -1019,7 +1057,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         menu.hide();
         return;
       }
-      menu.show(<SlashMenu state={slash} onPick={value => handlers.slashPick(value)} />, {
+      menu.show(<SlashMenu state={slash} onPick={value => handlers.slashPick(value)} listRef={listRef('slash')} />, {
         anchor,
         placement: 'bottom-start',
         offset: 4,
@@ -1057,11 +1095,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
           state={completion}
           kind={open.trigger.kind}
           onPick={index => handlers.completionPick(index)}
-          onOption={(value, node) => {
-            if (node === null) optionNodes.delete(value);
-            else optionNodes.set(value, node);
-            optionsChanged.next(optionsChanged.value + 1);
-          }}
+          listRef={listRef('completion')}
         />,
         { anchor, anchorRect: at, placement: 'bottom-start', offset: 4, environment: anchor }
       );
@@ -1207,16 +1241,26 @@ function ChunkView(inputs: Inputs<{ members: readonly Block[]; context: Context 
   );
 }
 
-/** The slash menu's list: the items the query matches, the lit one marked. */
-function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: string) => void }>, _ctx: ComponentContext) {
-  const items = inputs.state.pipe(map(open => (open === null ? [] : filterSlash(open.query))));
+/** The slash menu's list: the items the query matches, the lit one the field's active descendant. */
+function SlashMenu(
+  inputs: Inputs<{ state: SlashState | null; onPick: (value: string) => void; listRef: ListRef }>,
+  _ctx: ComponentContext
+) {
+  const listRef = inputs.listRef.value;
+  const items = inputs.state.pipe(
+    map(open => (open === null ? [] : filterSlash(open.query))),
+    distinctUntilChanged((a, b) => a.length === b.length && a.every((item, at) => item === b[at]))
+  );
   const lit = inputs.state.pipe(map(open => open?.index ?? 0));
-  const row = (item: SlashItem, index: number) => (
+  const row = (item: SlashItem, index: number, count: number) => (
     <button
       key={item.value}
+      ref={listRef(item.value)}
       role="option"
       label={item.label}
       states={lit.pipe(map(at => (at === index ? ['selected' as const] : [])))}
+      posInSet={index + 1}
+      setSize={count}
       onClick={() => inputs.onPick.value(item.value)}
       backgroundColor={lit.pipe(map(at => (at === index ? 'controlBackgroundHovered' : 'surface')))}
       borderRadius={6}
@@ -1234,6 +1278,7 @@ function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: st
   );
   return (
     <column
+      ref={listRef('list')}
       role="listbox"
       label="Turn into"
       width={240}
@@ -1245,7 +1290,9 @@ function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: st
       borderRadius={8}>
       {items.pipe(
         map(list =>
-          list.length === 0 ? [<text key="none" text="No matches" fontSize={13} color="textMuted" padding={8} />] : list.map(row)
+          list.length === 0
+            ? [<text key="none" text="No matches" fontSize={13} color="textMuted" padding={8} />]
+            : list.map((item, index) => row(item, index, list.length))
         )
       )}
     </column>
@@ -1258,16 +1305,17 @@ function CompletionMenu(
     state: CompletionState | null;
     kind: 'mention' | 'reference';
     onPick: (index: number) => void;
-    onOption: (value: string, node: UiNode | null) => void;
+    listRef: ListRef;
   }>,
   _ctx: ComponentContext
 ) {
   const kind = inputs.kind.value;
+  const listRef = inputs.listRef.value;
   const lit = inputs.state.pipe(map(open => open?.index ?? 0));
   const row = (item: Suggestion, index: number, count: number) => (
     <row
       key={item.value}
-      ref={(node: UiNode | null) => inputs.onOption.value(item.value, node)}
+      ref={listRef(item.value)}
       role="option"
       label={item.label}
       description={item.detail}
@@ -1295,6 +1343,7 @@ function CompletionMenu(
     open !== null && !open.answered ? 'Searching…' : kind === 'mention' ? 'No one matches' : 'No issues match';
   return (
     <column
+      ref={listRef('list')}
       role="listbox"
       label={kind === 'mention' ? 'Mention someone' : 'Link an issue'}
       // A press on an option is a pick, not the start of a text
@@ -1453,10 +1502,13 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
           handlers.selected(id, event.value, event.start, event.end);
         }
       }}
-      // While a mention or reference list is open over it, the field is
-      // its combobox, and the lit option is what a screen reader reads.
+      // While the slash menu or a mention or reference list is open over
+      // it, the field is its combobox: it controls the list, which
+      // suggests, and the lit option is what a screen reader reads.
       role={popup.pipe(map(open => (open === null ? undefined : ('combobox' as const))))}
       states={popup.pipe(map(open => (open === null ? [] : ['expanded' as const])))}
+      controls={popup.pipe(map(open => open?.list ?? null))}
+      autocomplete={popup.pipe(map(open => (open === null ? undefined : ('list' as const))))}
       activeDescendant={popup.pipe(map(open => open?.active ?? null))}
       modifiers={[focusRequests({ id, requests, fields })]}
     />

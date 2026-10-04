@@ -183,6 +183,15 @@ describe('inline runs', () => {
     expect(inlineSlice(source, 0, source.length)).toBe(source);
   });
 
+  it('draws a key as a reference only where a key can start, and @ before capitals as neither', () => {
+    expect(inlineRuns('(WEB-12)').find(run => run.text === 'WEB-12')).toMatchObject({ fontWeight: 600 });
+    expect(inlineRuns('see "WEB-12"').find(run => run.text === 'WEB-12')).toMatchObject({ fontWeight: 600 });
+    // A handle being typed, not a reference; and one word, not a key.
+    expect(inlineRuns('@WEB-12')).toEqual([{ text: '@WEB-12' }]);
+    expect(inlineRuns('x-WEB-12')).toEqual([{ text: 'x-WEB-12' }]);
+    expect(inlineRuns('@ada')[1]).toMatchObject({ text: 'ada', fontWeight: 600 });
+  });
+
   it('does not treat snake_case or unclosed markers as emphasis', () => {
     expect(inlineRuns('snake_case_name and **open')).toEqual([{ text: 'snake_case_name and **open' }]);
   });

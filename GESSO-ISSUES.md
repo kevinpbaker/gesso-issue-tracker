@@ -916,6 +916,43 @@ Checked, for 63 to 67: the core, framework, components and vite-plugin
 tests (3,934 across the first three), types, format, the API reports
 and the docs check.
 
+### 68. A field couldn't name the list it opens, or say it suggests
+
+**What:** the editor's mention and reference lists, and its slash menu,
+make the block's field a combobox while they're open. ARIA's combobox
+says which list it opens with `aria-controls` and that the list holds
+suggestions with `aria-autocomplete`, and Gesso had neither: a screen
+reader heard that something was expanded, not what. Gesso's own
+`Combobox` didn't say them either.
+
+**Fix:** two semantics properties. `controls` is a relation like
+`activeDescendant`: the record holds the other node's id, and the
+mirror, and the editing proxy for a focused field, write it as
+`aria-controls` naming that record's element. `autocomplete` (`list`,
+`inline` or `both`) is written as `aria-autocomplete`. `Combobox`'s
+field controls its list while it's open, and is `list` (`77195a4`).
+Specs: `UiSemanticsTree.spec.ts`, "names the list a combobox controls,
+and says the list suggests"; `SemanticsMirror.spec.ts` and
+`EditingProxy.spec.ts`; `Combobox.spec.ts`, "names the list it
+controls while open, and says it suggests". In the tracker:
+`MarkdownEditor.spec.tsx`, "makes the block a combobox while it's
+open, its highlight the active option" and, for the slash menu, which
+now goes through the same mechanism and says what it turned the block
+into, "makes the paragraph a combobox while it's open, controlling the
+menu, and says what it turned into". Docs: semantics, "The
+properties"; the mirror; combobox, "Keyboard"; the properties
+reference. Checked with the core, framework and components tests
+(3,939), types, lint, format, the API reports and the docs check.
+
+**Not Gesso's:** `@` counted as the start of a word for an issue key,
+so typing `@WEB-` (a handle being typed) offered issues, and `@WEB-12`
+was drawn as a reference. A key now starts only after a space, the
+start of the block or opening punctuation, in what opens the list and
+what's drawn as a chip alike; and the character that ends a mention can
+start a reference, as in `@kim WEB-`. Spec: `MarkdownEditor.spec.tsx`,
+"opens issues only where a key starts a word, not after @ or a letter";
+`markdown.spec.ts` for the chips.
+
 ### Tooling
 
 - **The accessibility check is a library** (`937f1d7`), so the tracker

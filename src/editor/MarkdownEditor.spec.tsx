@@ -506,6 +506,29 @@ describe('the slash menu', () => {
     expect(source()).toBe('/quot');
   });
 
+  it("makes the paragraph a combobox while it's open, controlling the menu, and says what it turned into", async () => {
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    await type('/');
+    const combobox = ui.getAllByRole('combobox')[0]!;
+    const semantics = () => ui.getSemantics(combobox);
+    expect(semantics().label).toBe('Paragraph');
+    expect(semantics().states).toContain('expanded');
+    expect(semantics().autocomplete).toBe('list');
+    expect(semantics().controls).toBe(menu()!.id);
+    const active = () => ui.getAllByRole('option').find(option => option.id === semantics().activeDescendant)!;
+    expect(ui.getSemantics(active())).toMatchObject({ label: 'Text', posInSet: 1, setSize: 10 });
+    await press('ArrowDown');
+    expect(ui.getSemantics(active()).label).toBe('Heading 1');
+    expect(ui.getSemantics(active()).states).toContain('selected');
+    await type('quo');
+    expect(ui.getSemantics(active())).toMatchObject({ label: 'Quote', posInSet: 1, setSize: 1 });
+    await press('Enter');
+    expect(ui.queryByRole('combobox')).toBeNull();
+    expect(textProperty(ui.getByRole('status'))).toBe('Turned into Quote');
+    expect(source()).toBe('>');
+  });
+
   it('stays shut for a slash anywhere else', async () => {
     await mount('a path');
     await caretIn('Paragraph', 0, 'end');
@@ -661,6 +684,8 @@ describe('mentions and issue references', () => {
     const combobox = field();
     expect(ui.getSemantics(combobox).label).toBe('Paragraph');
     expect(ui.getSemantics(combobox).states).toContain('expanded');
+    expect(ui.getSemantics(combobox).autocomplete).toBe('list');
+    expect(ui.getSemantics(combobox).controls).toBe(list('Mention someone')!.id);
     const active = () => ui.getAllByRole('option').find(option => option.id === ui.getSemantics(combobox).activeDescendant);
     expect(ui.getSemantics(active()!).label).toBe('Ada Lovelace');
     expect(ui.getSemantics(active()!).description).toBe('@ada');
@@ -726,6 +751,27 @@ describe('mentions and issue references', () => {
     expect(list('Link an issue')).not.toBeNull();
     await press('Escape');
     expect(source()).toBe('WEB-7 is web- or XYZ- or a WEB-');
+  });
+
+  it('opens issues only where a key starts a word, not after @ or a letter', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    // `@WEB` is a handle being typed: the dash ends the mention and opens nothing.
+    await keys('@WEB-');
+    expect(list('Mention someone')).toBeNull();
+    expect(list('Link an issue')).toBeNull();
+    await keys(' xWEB-');
+    expect(list('Link an issue')).toBeNull();
+    await keys(' (WEB-');
+    expect(list('Link an issue')).not.toBeNull();
+    await press('Escape');
+    // The dash that ends a mention can start a reference.
+    await keys(' @kim WEB-');
+    expect(list('Mention someone')).toBeNull();
+    expect(options()).toEqual(['WEB-12', 'WEB-120', 'WEB-7']);
+    expect(ui.getSemantics(field()).controls).toBe(list('Link an issue')!.id);
+    await press('Escape');
+    expect(source()).toBe('@WEB- xWEB- (WEB- @kim WEB-');
   });
 
   it("neither opens nor closes over an IME's composition, nor takes its keys", async () => {

@@ -30,6 +30,27 @@ interface Token {
   readonly pattern: RegExp;
   /** The style of each capture group, in order: open marker, content, close marker, … */
   readonly styles: readonly Style[];
+  /** Where it can start, when that's narrower than any word's start. */
+  readonly startsAt?: (source: string, at: number) => boolean;
+}
+
+/**
+ * Whether a word starts at `at`: the character before isn't a letter or
+ * a digit. Markup only starts at one, so `snake_case` stays plain and
+ * `me@x.dev` is no mention.
+ */
+export function wordStart(source: string, at: number): boolean {
+  return at === 0 || !/[A-Za-z0-9]/.test(source[at - 1]!);
+}
+
+/**
+ * Whether an issue key can start at `at`: at the start of the text,
+ * after a space, or after opening punctuation, as in `(WEB-12)` or
+ * `"WEB-12"`. After anything else the capitals belong to something
+ * else: `@WEB` is a handle being typed, `x-WEB-12` one word.
+ */
+export function keyStart(source: string, at: number): boolean {
+  return at === 0 || /[\s([{"'“‘«]/.test(source[at - 1]!);
 }
 
 const MARK: Style = { color: 'textMuted' };
@@ -46,7 +67,7 @@ const TOKENS: readonly Token[] = [
   // Mentions and issue references are chips: the whole token on one
   // background, and still plain text in the markdown.
   { pattern: /(@)([a-z][a-z0-9_-]*)/y, styles: [CHIP, { ...CHIP, fontWeight: 600 }] },
-  { pattern: /()([A-Z]{2,5}-\d+)\b/y, styles: [{}, { ...CHIP, fontWeight: 600 }] }
+  { pattern: /()([A-Z]{2,5}-\d+)\b/y, styles: [{}, { ...CHIP, fontWeight: 600 }], startsAt: keyStart }
 ];
 
 /** Characters that can open a token; everything else is skipped in one go. */
@@ -71,10 +92,11 @@ export function inlineRuns(source: string, options: { hideMarkers?: boolean } = 
 
   outer: while (at < source.length) {
     const char = source[at]!;
-    // A token only starts at a word boundary, so `snake_case` stays plain.
-    const boundary = at === 0 || !/[A-Za-z0-9]/.test(source[at - 1]!);
-    if (OPENERS.test(char) && boundary) {
+    if (OPENERS.test(char) && wordStart(source, at)) {
       for (const token of TOKENS) {
+        if (token.startsAt !== undefined && !token.startsAt(source, at)) {
+          continue;
+        }
         token.pattern.lastIndex = at;
         const match = token.pattern.exec(source);
         if (match !== null && match[0].length > 0) {
