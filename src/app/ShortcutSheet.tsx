@@ -149,7 +149,10 @@ function SheetBody(
     }
   };
   return (
-    <column gap={12} width={percent(100)}>
+    // minHeight 0, so on a short window the column gives up height
+    // rather than keeping what its list asks for; the list below is what
+    // gives it.
+    <column gap={12} width={percent(100)} minHeight={0}>
       <editabletext
         value={inputs.query}
         placeholder="Filter shortcuts…"
@@ -169,8 +172,10 @@ function SheetBody(
         onKeyDown={onKeyDown}
       />
       {/* A fixed height, so the dialog, centred, stays put as a filter
-          shortens the list; and room on the right for the scroll bar. */}
-      <scrollview height={420}>
+          shortens the list; and room on the right for the scroll bar.
+          Less on a window too short for it: the dialog fits the window,
+          and the list takes what's left under the filter. */}
+      <scrollview height={420} minHeight={0}>
         <column gap={16} paddingRight={14}>
           {shown.pipe(
             map(sections =>

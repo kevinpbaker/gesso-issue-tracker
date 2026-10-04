@@ -69,7 +69,11 @@ afterEach(() => {
   h?.served.dispose();
 });
 
-async function mount(disk = new MemoryDisk(), store = new IssueStore(seedWorkspace({ issues: 300 }), 1)): Promise<void> {
+async function mount(
+  disk = new MemoryDisk(),
+  store = new IssueStore(seedWorkspace({ issues: 300 }), 1),
+  size = { width: 1000, height: 900 }
+): Promise<void> {
   const compose = new ComposeService(store, disk);
   await compose.restore();
   const served = serveForTest([
@@ -87,7 +91,7 @@ async function mount(disk = new MemoryDisk(), store = new IssueStore(seedWorkspa
   services.register(ShortcutsService);
   services.register(ListPlaces);
   services.register(NewIssueService);
-  const ui = renderTest(createComponent(Shell), { channels: served.registry, width: 1000, height: 900, services });
+  const ui = renderTest(createComponent(Shell), { channels: served.registry, ...size, services });
   h = { ui, served, store, compose };
   await settle();
   ui.fireEvent.focus(ui.getByLabel('Page'));
@@ -210,4 +214,35 @@ describe('the New issue dialog', () => {
     await press('c');
     expect(editorFor(h.ui.getByRole('textbox', { name: 'Title' })).text).toBe('Half a thought');
   });
+});
+
+describe('the New issue dialog in a short window', () => {
+  for (const [width, height] of [
+    [375, 500],
+    [1280, 500]
+  ] as const) {
+    it(`fits ${width}×${height}, with the title in view and the buttons a Tab away`, async () => {
+      // The form is taller than 500 pixels with its buttons; centred, it
+      // ran off the top and the bottom of the window, title and all.
+      await mount(undefined, undefined, { width, height });
+      await press('c');
+      const dialog = h.ui.getLayout(h.ui.getByRole('dialog', { name: 'New issue' }));
+      expect(dialog.y).toBeGreaterThanOrEqual(16);
+      expect(dialog.y + dialog.height).toBeLessThanOrEqual(height - 16);
+      expect(dialog.x).toBeGreaterThanOrEqual(16);
+      expect(dialog.x + dialog.width).toBeLessThanOrEqual(width - 16);
+      // The body scrolls under the title, and Tab brings the last button
+      // into view inside the dialog.
+      const title = h.ui.getVisibleBox(h.ui.getByRole('textbox', { name: 'Title' }));
+      expect(title.y).toBeGreaterThan(dialog.y);
+      await tabTo('switch', 'Create more');
+      await press('Tab');
+      await press('Tab');
+      const create = focused()!;
+      expect(h.ui.querySemantics(create)?.label).toBe('Create issue');
+      const button = h.ui.getVisibleBox(create);
+      expect(button.y).toBeGreaterThanOrEqual(dialog.y);
+      expect(button.y + button.height).toBeLessThanOrEqual(dialog.y + dialog.height);
+    });
+  }
 });

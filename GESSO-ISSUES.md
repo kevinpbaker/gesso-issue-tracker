@@ -4,10 +4,9 @@ These are problems in Gesso, or traps in using it, found by building on
 it, and what happened to each.
 
 **Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix, `2c572e3` through `3896cea` (another session's commits are
-interleaved in the same range). Not released. Another session working in
-the same checkout has pushed `main` up to `0f02fc2`; this one has pushed
-nothing. Every
+per fix, `2c572e3` through `684b59a` (another session's commits are
+interleaved in the same range). All of them are released: `main` is
+pushed through `99f67cc`, which is Gesso 0.5.1 (tag `v0.5.1`). Every
 fix has a spec that fails without it, a changeset, and docs where
 behavior changed. Gesso's full `pnpm check` passed through `f3a9544`:
 format, lint, types, 4,487 tests, build, API reports and the docs
@@ -801,6 +800,11 @@ setting in it keeps a tick column on every row, and those rows are
 `MenuBar.spec.ts`. Docs: menu bar, "A setting gets a tick". Checked
 with the components package's 466 tests, types, lint, format, the API
 report and the docs check.
+Released in 0.5.1, which gessosheet now depends on. Cutting it also
+fixed two things on `main` that failed `pnpm check`: the dialog docs
+example's spec still expected no margin after `3896cea` (`c75907a`), and
+`anchorRect` had no property note, so the reference pages could not be
+generated (`894efee`).
 
 ### 62. A popup couldn't open at a character in a field
 
@@ -915,6 +919,78 @@ Docs: dialog.
 Checked, for 63 to 67: the core, framework, components and vite-plugin
 tests (3,934 across the first three), types, format, the API reports
 and the docs check.
+
+### 68. A dialog taller than the window ran off the top and the bottom
+
+**What:** in a window shorter than about 560 pixels, the shortcut sheet
+(a 420 pixel list under its filter) and the new issue form were taller
+than the window, and `Dialog` centres its content however tall it is:
+both ran off the top and the bottom, title and buttons with them.
+
+**Fix:** as a browser's modal `<dialog>` does, a dialog is at most the
+window less 16 pixels top and bottom. The title and description keep
+their height and the body scrolls what doesn't fit; the body is a flex
+column that scrolls, so content that may shrink is given the room there
+is instead (`e4d2483`). The body keeps 4 pixels round its content, or
+the title field's focus ring lost its top where the body clips
+(`2a87a9d`). Spec: `Dialog.spec.ts`, "fits a dialog taller than the
+screen inside it, scrolling the body under the title" and "gives
+content that can shrink the room there is". Docs: dialog, "On a short
+screen". In the tracker, the sheet's list keeps its 420 pixels where
+there's room, so filtering doesn't move the dialog, and takes what's
+left under the filter where there isn't (`minHeight={0}` on it and its
+column). Specs: `shell.spec.tsx`, "the keyboard shortcut sheet in a
+short window"; `NewIssueDialog.spec.tsx`, "the New issue dialog in a
+short window", at 375×500 and 1280×500.
+
+### 69. A panel pinned to the window's corner stayed where the corner was
+
+**What:** found looking for 70. Opened at a phone's width and then
+widened, the tour card stayed on the left, over the sidebar. It is
+`position: absolute` from inside a column of the shell, against the
+window. An absolute node was placed only when its parent was, and the
+column kept its box when the window grew, so nothing placed the card
+again.
+
+**Fix:** the layout engine keeps the containing block each absolute
+node was placed against and, after a pass in which a positioned node or
+the root took a new box, places again the ones whose block changed
+(`3b20918`). Spec: `GessoRuntime.resize.spec.ts`, "places a panel
+pinned to the window's corner again, from inside a column that kept
+its size", and the same for a positioned ancestor. Docs: positioning
+and overlays, "What an absolute box is placed against". In the
+tracker: `shell.spec.tsx`, "keeps the tour in the corner of a window
+that was widened".
+
+### 70. A dialog that can't be dismissed let presses through to the page
+
+**What:** the report was the tour card drawn over an open dialog on a
+narrow window. That part didn't reproduce, in specs or in Chrome at
+320 to 375 pixels wide, with either dialog, before or after filing an
+issue: the overlay layer is the app root's sibling at zIndex 1000, and
+a zIndex only orders siblings, so the layer and everything in it draw
+over the whole app, the tour included; hit testing reads the same
+order. What is on screen on a phone is the tour card beside or below
+the dialog, undimmed, since Gesso's backdrop has no colour. A press
+there, though, reached the tour's buttons whenever the dialog wasn't
+dismissible: a `Dialog` with `dismissible={false}` had no backdrop at
+all. The tracker's two dialogs are dismissible, so their backdrops
+took those presses already.
+
+**Fix:** every `Dialog` has the backdrop; `dismissible` decides only
+whether a press or a wheel on it closes the dialog. An overlay entry
+takes `modal` for it (`684b59a`). Specs: `Dialog.spec.ts`, "covers a
+positioned panel with a zIndex, and takes its presses", dismissible or
+not, for a panel at zIndex 5000, painting and pressing both;
+`Overlay.spec.ts`, "keeps the page from a press or a wheel beside a
+modal entry". Docs: dialog, "`dismissible` is two things at once";
+positioning and overlays, "A modal entry covers the whole page". In
+the tracker: `shell.spec.tsx`, "the tour and a dialog on a narrow
+window".
+
+Checked, for 68 to 70: the core (2,453), framework (1,020) and
+components (473) tests, the docs examples, types, lint, format, the
+API reports and the docs check.
 
 ### 68. A field couldn't name the list it opens, or say it suggests
 

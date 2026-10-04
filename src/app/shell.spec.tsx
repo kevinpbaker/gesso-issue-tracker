@@ -599,3 +599,82 @@ describe('the keyboard shortcut sheet', () => {
     expect(sheet()).not.toBeNull();
   });
 });
+
+describe('the keyboard shortcut sheet in a short window', () => {
+  const dialogBox = (name: string) => ui.getLayout(ui.getByRole('dialog', { name }));
+
+  /** The keyboard shortcut sheet's scrolling list. */
+  function sheetList(): UiNode {
+    let node: UiNode | null = ui.getAllByRole('list')[0]!;
+    while (node !== null && node.type !== UiNodeType.ScrollView) node = node.parent;
+    return node!;
+  }
+
+  it('gives the shortcut list the room there is, with the filter in view', async () => {
+    await mount('/team/web/list', 375, 500);
+    ui.fireEvent.press('?', { shift: true });
+    await settle();
+    const dialog = dialogBox('Keyboard shortcuts');
+    expect(dialog.y).toBeGreaterThanOrEqual(16);
+    expect(dialog.y + dialog.height).toBeLessThanOrEqual(500 - 16);
+    const filter = ui.getVisibleBox(ui.getByRole('searchbox', { name: 'Filter shortcuts' }));
+    expect(filter.y).toBeGreaterThan(dialog.y);
+    // Less than the 420 it asks for, and inside the dialog: the list
+    // scrolls itself rather than the dialog scrolling the filter away.
+    const list = ui.getLayout(sheetList());
+    expect(list.height).toBeLessThan(420);
+    expect(list.y + list.height).toBeLessThanOrEqual(dialog.y + dialog.height);
+  });
+
+  it('keeps the shortcut list its own height where there is room, however a filter shortens it', async () => {
+    await mount('/team/web/list');
+    ui.fireEvent.press('?', { shift: true });
+    await settle();
+    const list = sheetList();
+    const before = { dialog: dialogBox('Keyboard shortcuts'), list: ui.getLayout(list) };
+    expect(before.list.height).toBe(420);
+    ui.fireEvent.type('zzz');
+    await settle();
+    expect(textOf(ui.getByRole('dialog', { name: 'Keyboard shortcuts' }))).toContain('No shortcut matches');
+    expect({ dialog: dialogBox('Keyboard shortcuts'), list: ui.getLayout(list) }).toEqual(before);
+  });
+});
+
+describe('the tour and a dialog on a narrow window', () => {
+  it('draws the dialog over the tour, and a press on the tour reaches neither its buttons nor the page', async () => {
+    await mount('/team/web/list', 375, 640);
+    const tour = () => ui.getByRole('region', { name: 'Tour' });
+    expect(textOf(tour())).toContain('1 of 7');
+    ui.fireEvent.press('c');
+    await settle();
+    // Past the dialog's entrance, which takes no presses at opacity 0.
+    ui.frame(10_000);
+    await settle();
+
+    // One frame's drawing: the tour first, the dialog over it.
+    ui.clearDraws();
+    ui.runtime.resize(375, 641);
+    ui.frame();
+    const texts = ui.draws.filter(call => call.name === 'fillText').map(call => String(call.args[0]));
+    expect(texts.indexOf('Next')).toBeGreaterThanOrEqual(0);
+    expect(texts.indexOf('Next')).toBeLessThan(texts.lastIndexOf('New issue'));
+
+    // A press on the tour's Next lands on the dialog or its backdrop,
+    // which closes the dialog: the tour stays on its step.
+    const next = ui.getVisibleBox(ui.getByRole('button', { name: 'Next step' }));
+    ui.fireEvent.pointerDown(next.x + next.width / 2, next.y + next.height / 2);
+    ui.fireEvent.pointerUp(next.x + next.width / 2, next.y + next.height / 2);
+    await settle();
+    expect(textOf(tour())).toContain('1 of 7');
+  });
+
+  it('keeps the tour in the corner of a window that was widened', async () => {
+    // Gesso placed it against the window it was first laid out in: widened
+    // from a phone's width, the card stayed on the left, over the sidebar.
+    await mount('/team/web/list', 375, 640);
+    ui.runtime.resize(1280, 640);
+    await settle();
+    const card = ui.getLayout(ui.getByRole('region', { name: 'Tour' }));
+    expect(card.x + card.width).toBe(1280 - 16);
+  });
+});
