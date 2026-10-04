@@ -7,7 +7,8 @@ import { RouterService, ShellService, type ComponentContext, type Inputs, type O
 
 import { Issues } from '../issues/IssuesContract';
 import { Preferences, type ThemeChoice } from './PreferencesContract';
-import { ShortcutsService } from './ShortcutsService';
+import { ShortcutSheet } from './ShortcutSheet';
+import { KEYBOARD_SHORTCUTS, ShortcutsService } from './ShortcutsService';
 import { NewIssueDialog } from '../compose/NewIssueDialog';
 import { NewIssueService } from '../compose/NewIssueService';
 import { CommandPalette } from '../palette/CommandPalette';
@@ -29,15 +30,16 @@ import { UndoToast } from './UndoToast';
  * resolved from the saved preference and what the platform reports,
  * and provided as an environment value, so nothing below names a
  * colour that isn't a token. And it owns the shortcuts that work
- * everywhere: undo, redo, the sidebar, and `g` chords to move around,
- * and the toast that says what each change did and offers it back.
+ * everywhere: undo, redo, the sidebar, `g` chords to move around and
+ * `?` for the sheet that lists the rest, and the toast that says what each change did and offers it back.
  */
 export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
   const prefs = ctx.channel(Preferences);
   const issues = ctx.channel(Issues);
   const shell = ctx.inject(ShellService);
   const router = ctx.inject(RouterService);
-  const { registry } = ctx.inject(ShortcutsService);
+  const keys = ctx.inject(ShortcutsService);
+  const { registry } = keys;
   const newIssue = ctx.inject(NewIssueService);
   const palette = ctx.inject(CommandsService);
   const meta = ctx.channel(WorkspaceMeta);
@@ -79,6 +81,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         theme('light', 'Use the light theme'),
         theme('dark', 'Use the dark theme'),
         theme('system', 'Follow the system theme'),
+        { id: 'shortcuts', label: KEYBOARD_SHORTCUTS, group: 'Help', keywords: 'keys keyboard hotkeys help cheat sheet', run: () => (keys.sheetOpen.value = true) },
         { id: 'tour', label: 'Take the tour', group: 'Help', keywords: 'guide help start introduction', run: () => prefs.send.setTourDone(false) },
         { id: 'reset', label: 'Reset the workspace to its seed', group: 'Workspace', keywords: 'start over clear', run: () => issues.send.reset() }
       ];
@@ -109,6 +112,7 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
       <TopBar menu={narrowNow} onMenu={() => drawer.next(true)} />
       <NewIssueDialog open={newIssue.open} onClose={() => (newIssue.open.value = false)} />
       <CommandPalette />
+      <ShortcutSheet />
       <box height={1} backgroundColor="border" />
       {/* minHeight 0 too: without it a page taller than the window sets the
           box's minimum height, and the page's own scroll view never scrolls.
@@ -149,6 +153,12 @@ export function AppShell(inputs: Inputs<OutletProps>, ctx: ComponentContext) {
         global('Mod+K', 'Open the command palette', () => {
           closeDrawer();
           palette.open.value = !palette.open.value;
+        }),
+        // `?` is a character, not a key: Gesso matches it however the
+        // layout types it (Shift+/ here, Shift+ß in Germany). Again closes it.
+        global('?', KEYBOARD_SHORTCUTS, () => {
+          closeDrawer();
+          keys.sheetOpen.value = !keys.sheetOpen.value;
         })
       ]}>
       {Responsive({ at: [NARROW], as: 'row', flexGrow: 1, flexBasis: 0, minWidth: 0, y: 'stretch' }, size => {

@@ -7,6 +7,7 @@ import { RouterService, type ComponentContext, type Inputs } from 'gesso-framewo
 import { Issues } from '../issues/IssuesContract';
 import { NewIssueService } from '../compose/NewIssueService';
 import { Views } from '../views/ViewsContract';
+import { KEYBOARD_SHORTCUTS, ShortcutsService } from './ShortcutsService';
 import { BUILT_IN_VIEWS } from './Sidebar';
 import { WorkspaceMeta, type WorkspaceView } from './WorkspaceContract';
 
@@ -54,6 +55,7 @@ export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, 
   const issues = ctx.channel(Issues);
   const newIssue = ctx.inject(NewIssueService);
   const views = ctx.channel(Views);
+  const keys = ctx.inject(ShortcutsService);
 
   const place = new BehaviorSubject<Place>({ title: '', team: null, view: null });
   ctx.effect(combineLatest([router.url, meta.view.teams, meta.view.projects, views.view.views]), ([url, teams, projects, saved]) =>
@@ -103,6 +105,10 @@ export function TopBar(inputs: Inputs<{ menu?: boolean; onMenu?: () => void }>, 
           variant="plain"
           onClick={() => issues.send.undo()}>
           <text text="Undo" fontSize={12} color="text" />
+        </Button>
+        {/* The way to find the shortcuts besides the palette, and a hint that `?` opens it. */}
+        <Button label={KEYBOARD_SHORTCUTS} description="?" size="small" variant="plain" onClick={() => (keys.sheetOpen.value = true)}>
+          <text text="?" fontSize={12} fontWeight={600} color="textMuted" />
         </Button>
       </row>
     </row>

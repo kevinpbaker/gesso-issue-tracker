@@ -493,3 +493,109 @@ describe('stepping through a list from an issue, and back', () => {
     expect(ui.runtime.input.focus.focusedNode).toBe(board());
   });
 });
+
+describe('the keyboard shortcut sheet', () => {
+  const sheet = () => ui.queryByRole('dialog', { name: 'Keyboard shortcuts' });
+  const rows = () => ui.getAllByRole('listitem').map(node => ui.getSemantics(node).label ?? '');
+  const headings = () => ui.getAllByRole('heading').map(node => textOf(node));
+  async function press(key: string, modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean } = {}): Promise<void> {
+    ui.fireEvent.press(key, modifiers);
+    await settle();
+  }
+
+  it('opens on ? with what works on this screen, a row for each thing with every key that does it', async () => {
+    await mount('/team/web/list');
+    await press('?', { shift: true });
+    expect(sheet()).not.toBeNull();
+    // The shell's own first, then the list's; no editor on a list.
+    expect(headings()).toEqual(['Global', 'List']);
+    // j and ↓ are one row, named the way a screen reader should say it.
+    expect(rows()).toContain('Next issue, j or Down arrow');
+    expect(rows()).toContain('Open the command palette, Control K');
+    expect(rows()).toContain('Keyboard shortcuts, Question mark');
+    expect(rows()).toContain('Go to the board, g then b');
+    expect(rows().filter(row => row.startsWith('Next issue,'))).toHaveLength(1);
+    // Drawn as caps: ↓ and Ctrl, K are caps of their own.
+    const next = ui.getAllByRole('listitem').find(node => ui.getSemantics(node).label?.startsWith('Next issue,'))!;
+    expect(textOf(next)).toBe('Next issue J or ↓');
+
+    // ? again closes it, from the filter that has the caret; so does Escape.
+    await press('?', { shift: true });
+    expect(sheet()).toBeNull();
+    await press('?', { shift: true });
+    await press('Escape');
+    expect(sheet()).toBeNull();
+  });
+
+  it('opens on ? however the layout types it', async () => {
+    await mount('/team/web/list');
+    // Unshifted, as on a layout with ? on a key of its own; then AltGr.
+    await press('?');
+    expect(sheet()).not.toBeNull();
+    await press('Escape');
+    await press('?', { ctrl: true, alt: true });
+    expect(sheet()).not.toBeNull();
+  });
+
+  it("narrows to what's typed, by what it does or by its keys", async () => {
+    await mount('/team/web/list');
+    await press('?', { shift: true });
+    ui.fireEvent.type('select');
+    await settle();
+    expect(rows().length).toBeGreaterThan(0);
+    expect(rows().every(row => /select/i.test(row))).toBe(true);
+    for (let i = 0; i < 'select'.length; i++) await press('Backspace');
+    ui.fireEvent.type('down arrow');
+    await settle();
+    expect(rows()).toEqual(['Next issue, j or Down arrow', 'Extend the selection down, Shift J or Shift Down arrow']);
+    ui.fireEvent.type('zzz');
+    await settle();
+    expect(textOf(sheet()!)).toContain('No shortcut matches');
+  });
+
+  it("lists the editor's keys on an issue, which the editor handles itself", async () => {
+    await mount('/issue/WEB-12');
+    await press('?', { shift: true });
+    expect(headings().at(-1)).toBe('Editor');
+    expect(rows()).toContain('Bold, Control B');
+    expect(rows()).toContain('Strikethrough, Control Shift X');
+    expect(rows()).toContain('Leave the editor, Escape then Tab');
+    expect(rows()).toContain('Mention someone, @');
+    expect(rows()).toContain('Next issue, j');
+  });
+
+  it('is not opened by a ? typed into a field', async () => {
+    await mount('/team/web/list');
+    const search = ui.getByRole('textbox', { name: 'Search issues' });
+    ui.fireEvent.focus(search);
+    await settle();
+    expect(ui.runtime.input.focus.focusedNode).toBe(search);
+    await press('?', { shift: true });
+    expect(sheet()).toBeNull();
+  });
+
+  it('opens from the palette, which finds it by "help", and from the top bar', async () => {
+    await mount('/team/web/list');
+    await press('k', { ctrl: true });
+    ui.fireEvent.type('keyboard shortcuts');
+    await settle();
+    await press('Enter');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await settle();
+    expect(sheet()).not.toBeNull();
+    await press('Escape');
+
+    const palette = ui.runtime.services.get(CommandsService);
+    const catalog = () => ui.getAllByRole('option').map(node => ui.getSemantics(node).label);
+    await press('k', { ctrl: true });
+    ui.fireEvent.type('help');
+    await settle();
+    expect(catalog()).toContain('Keyboard shortcuts');
+    await press('Escape');
+    expect(palette.open.value).toBe(false);
+
+    ui.fireEvent.click(ui.getByRole('button', { name: 'Keyboard shortcuts' }));
+    await settle();
+    expect(sheet()).not.toBeNull();
+  });
+});

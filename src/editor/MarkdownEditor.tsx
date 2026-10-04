@@ -1557,6 +1557,9 @@ export const EDITOR_SHORTCUTS: readonly { readonly keys: string; readonly label:
   { keys: 'Mod+K', label: 'Link' },
   { keys: 'Mod+Shift+X', label: 'Strikethrough' },
   { keys: '/', label: 'Turn an empty line into a heading, a list or another block' },
+  // Completions (`completion.ts`): `@` for people, a team's key and a dash for issues.
+  { keys: '@', label: 'Mention someone' },
+  { keys: 'WEB-', label: "Link an issue: its team's key and a dash" },
   { keys: 'Tab', label: 'Indent a list item' },
   { keys: 'Shift+Tab', label: 'Outdent a list item' },
   { keys: 'Escape Tab', label: 'Leave the editor' },
