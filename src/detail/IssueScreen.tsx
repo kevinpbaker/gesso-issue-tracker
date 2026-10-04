@@ -20,6 +20,7 @@ import { COPY_LINK, copyCommands, propertyCommands } from '../palette/propertyCo
 import { Recent } from '../recent/RecentContract';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
 import { MarkdownView } from '../editor/MarkdownView';
+import { editorCompletions } from '../references/editorCompletions';
 import { PRIORITY_NAMES, type Issue, type Priority } from '../model/types';
 import { IssueDetailChannel, type IssueDetail, type IssueRef, type LinkKind } from './IssueDetailContract';
 import { Steps, type StepPosition } from './StepsContract';
@@ -97,6 +98,7 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
   const commands = ctx.inject(CommandsService);
   const { registry } = ctx.inject(ShortcutsService);
   const copyIssue = useCopyIssue(ctx);
+  const completions = editorCompletions(ctx);
   /** Copies this issue's link or key, as it's called now. */
   const copy = (what: CopyWhat): void => {
     const current = inputs.detail.value.issue;
@@ -205,6 +207,7 @@ function IssueBody(inputs: Inputs<{ detail: IssueDetail }>, ctx: ComponentContex
               fit
               label="Description"
               placeholder="Add a description…"
+              completions={completions}
               onChange={markdown => {
                 if (markdown === mine) return;
                 mine = markdown;
@@ -645,6 +648,7 @@ function Activity(inputs: Inputs<{ detail: IssueDetail }>, _ctx: ComponentContex
 /** A comment, written in the same editor as the description. Mod+Enter sends it. */
 function CommentBox(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const channel = ctx.channel(IssueDetailChannel);
+  const completions = editorCompletions(ctx);
   const draft = internalState('');
   // A new editor after each comment: the editor reads its value once.
   const round = internalState(0);
@@ -658,7 +662,16 @@ function CommentBox(_inputs: Inputs<{}>, ctx: ComponentContext) {
     <column gap={8}>
       {round.pipe(
         map(n => (
-          <MarkdownEditor key={String(n)} value="" fit label="Comment" placeholder="Leave a comment…" onChange={markdown => (draft.value = markdown)} onSubmit={send} />
+          <MarkdownEditor
+            key={String(n)}
+            value=""
+            fit
+            label="Comment"
+            placeholder="Leave a comment…"
+            completions={completions}
+            onChange={markdown => (draft.value = markdown)}
+            onSubmit={send}
+          />
         ))
       )}
       <row x="end">

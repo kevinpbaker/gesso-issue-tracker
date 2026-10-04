@@ -11,6 +11,9 @@ import { workspaceSource } from '../app/workspaceSource';
 import { IssueStore } from '../model/IssueStore';
 import type { TextStore } from '../model/persistence';
 import { seedWorkspace } from '../model/seed';
+import { References } from '../references/ReferencesContract';
+import { ReferenceService } from '../references/ReferenceService';
+import { referencesSource } from '../references/referencesSource';
 import { Compose } from './ComposeContract';
 import { ComposeService } from './ComposeService';
 import { NewIssueDialog } from './NewIssueDialog';
@@ -77,7 +80,8 @@ async function mount(disk = new MemoryDisk(), store = new IssueStore(seedWorkspa
         view: { draft: compose.draft, filed: compose.filed },
         commands: { save: d => compose.save(d), file: d => compose.file(d), discard: () => compose.discard() }
       }
-    }
+    },
+    { token: References, source: referencesSource(new ReferenceService(store)) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
@@ -161,6 +165,31 @@ describe('the New issue dialog', () => {
     // The next form starts empty, with the caret in the title.
     expect(editorFor(h.ui.getByRole('textbox', { name: 'Title' })).text).toBe('');
     expect(focused()).toBe(h.ui.getByRole('textbox', { name: 'Title' }));
+  });
+
+  it("completes mentions in the description, and Escape closes the list before the dialog", async () => {
+    await mount();
+    await press('c');
+    await type('Checkout fails');
+    await tabTo('textbox', 'Paragraph');
+    for (const char of 'Seen by @ke') await type(char);
+    const list = () => h.ui.queryByRole('listbox', { name: 'Mention someone' });
+    expect(h.ui.getAllByRole('option').map(option => h.ui.getSemantics(option).label)).toContain('Kemi Adeyemi');
+    await press('Escape');
+    expect(list()).toBeNull();
+    expect(isOpen()).toBe(true);
+    await press('Backspace');
+    await type('e');
+    expect(list()).toBeNull();
+    await press('Backspace');
+    await press('Backspace');
+    await press('Backspace');
+    await type('@');
+    await type('kem');
+    await press('Tab');
+    await press('Enter', { ctrl: true });
+    const filed = [...h.store.issues()].find(issue => issue.title === 'Checkout fails')!;
+    expect(filed.description.trim()).toBe('Seen by @kemi');
   });
 
   it('keeps a half-written issue through closing the dialog and a reload', async () => {

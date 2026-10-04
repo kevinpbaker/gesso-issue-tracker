@@ -19,6 +19,7 @@ import { internalState, type ComponentContext, type Inputs } from 'gesso-framewo
 
 import { WorkspaceMeta } from '../app/WorkspaceContract';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
+import { editorCompletions } from '../references/editorCompletions';
 import { PRIORITY_NAMES, type Priority } from '../model/types';
 import { Compose, type Draft } from './ComposeContract';
 
@@ -110,6 +111,7 @@ function ComposeForm(inputs: Inputs<{ close: () => void }>, ctx: ComponentContex
 function DraftForm(inputs: Inputs<{ draft: Draft; wrote: (draft: Draft) => void; close: () => void }>, ctx: ComponentContext) {
   const compose = ctx.channel(Compose);
   const meta = ctx.channel(WorkspaceMeta);
+  const completions = editorCompletions(ctx);
   const start = inputs.draft.value;
   const createMore = internalState(start.createMore);
   /** Bumped by every failed submit, so the same message is announced again. */
@@ -186,6 +188,7 @@ function DraftForm(inputs: Inputs<{ draft: Draft; wrote: (draft: Draft) => void;
           fit
           label="Description"
           placeholder="Add a description…"
+          completions={completions}
           onChange={markdown => issue.fields.description.change(markdown)}
           onSubmit={() => void submit()}
         />

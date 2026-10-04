@@ -30,6 +30,9 @@ import { paletteSource } from '../palette/paletteSource';
 import { Recent } from '../recent/RecentContract';
 import { RecentStore } from '../recent/RecentStore';
 import { recentSource } from '../recent/recentSource';
+import { References } from '../references/ReferencesContract';
+import { ReferenceService } from '../references/ReferenceService';
+import { referencesSource } from '../references/referencesSource';
 import { Views } from '../views/ViewsContract';
 import { ViewsStore } from '../views/ViewsStore';
 import { Preferences } from './PreferencesContract';
@@ -83,7 +86,8 @@ async function mount(url: string, width = 1280, height = 713): Promise<void> {
     },
     { token: Views, source: { view: { views: views.views, saved: views.saved }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } },
     { token: Palette, source: paletteSource(palette) },
-    { token: Recent, source: recentSource(recent) }
+    { token: Recent, source: recentSource(recent) },
+    { token: References, source: referencesSource(new ReferenceService(store)) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);

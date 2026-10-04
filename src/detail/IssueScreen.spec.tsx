@@ -19,6 +19,9 @@ import type { Issue } from '../model/types';
 import { Recent } from '../recent/RecentContract';
 import { RecentStore } from '../recent/RecentStore';
 import { recentSource } from '../recent/recentSource';
+import { References } from '../references/ReferencesContract';
+import { ReferenceService } from '../references/ReferenceService';
+import { referencesSource } from '../references/referencesSource';
 import { IssueDetailChannel } from './IssueDetailContract';
 import { IssueDetailService } from './IssueDetailService';
 import { IssueScreen } from './IssueScreen';
@@ -75,7 +78,8 @@ async function mount(store: IssueStore, key: string): Promise<void> {
     { token: IssueDetailChannel, source: detailSource(new IssueDetailService(store, 'u0')) },
     { token: Recent, source: recentSource(recent) },
     { token: Steps, source: stepsSource(new StepService(store, createBoardStore(store))) },
-    { token: Views, source: { view: { views: of([]), saved: of(null) }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } }
+    { token: Views, source: { view: { views: of([]), saved: of(null) }, commands: { save: () => {}, rename: () => {}, remove: () => {} } } },
+    { token: References, source: referencesSource(new ReferenceService(store)) }
   ]);
   const services = new ServiceRegistry();
   services.register(ShortcutsService);
@@ -216,6 +220,31 @@ describe('the issue page', () => {
     expect(h.ui.getSemantics(control('combobox', 'Estimate')).valueText).toBe('2 points');
     expect(h.ui.getAllByRole('textbox').some(node => editorFor(node).text.endsWith('It happens on **every** browser.'))).toBe(true);
     expect(h.ui.getByText(child!.title)).toBeDefined();
+  });
+
+  it('completes a mention from the workspace and an issue reference from the app worker, in a comment', async () => {
+    const store = fresh();
+    const target = [...store.issues()].find(i => i.teamId === 'web')!;
+    await mount(store, target.key);
+    const keys = async (text: string): Promise<void> => {
+      for (const char of text) await type(char);
+    };
+    const options = (): string[] => h.ui.getAllByRole('option').map(option => h.ui.getSemantics(option).label ?? '');
+    const comment = h.ui.getAllByRole('textbox', { name: 'Paragraph' }).find(node => node.properties.get('placeholder') === 'Leave a comment…')!;
+    await focus(comment);
+    await keys('Thanks @gra');
+    expect(h.ui.getByRole('listbox', { name: 'Mention someone' })).toBeDefined();
+    expect(options()[0]).toBe('Grace Kim');
+    await press('Enter');
+    await keys('see API-');
+    expect(h.ui.getByRole('listbox', { name: 'Link an issue' })).toBeDefined();
+    await keys('1');
+    // Asked of the app worker and answered from the store: API-1 first, then the keys it starts.
+    expect(options().slice(0, 2)).toEqual(['API-1', 'API-10']);
+    expect(h.ui.getSemantics(h.ui.getAllByRole('option')[0]!).description).toBe(issue('API-1').title);
+    await press('Enter');
+    await press('Enter', { ctrl: true });
+    expect(store.commentsOf(target.id).at(-1)!.body.trim()).toBe('Thanks @grace see API-1');
   });
 
   it('starts focus on the issue, and Tab goes on to its title', async () => {
