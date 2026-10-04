@@ -216,9 +216,11 @@ async function main(): Promise<void> {
     }
   } finally {
     devtools?.close();
-    endGroup(browser);
-    endGroup(preview);
-    rmSync(profile, { recursive: true, force: true });
+    // Chrome writes to its profile as it shuts down, so the profile is
+    // removed once it has gone; a removal racing it found the directory
+    // refilled under it and failed the run after every budget held.
+    await Promise.all([endGroup(browser), endGroup(preview)]);
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 
   if (failures.length > 0) {
@@ -344,15 +346,24 @@ function check(failures: string[], described: string, ok: boolean, budget: numbe
 }
 
 /** Ends a child and everything it started: `npx` and Chrome are both parents of what holds the resource. */
-function endGroup(child: ChildProcess | undefined): void {
-  if (child?.pid === undefined) {
-    return;
+/** Ends a process and its group, and settles once it has exited, or after five seconds. */
+function endGroup(child: ChildProcess | undefined): Promise<void> {
+  if (child?.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
   }
+  const exited = new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, 5_000);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
   try {
     process.kill(-child.pid, 'SIGTERM');
   } catch {
     child.kill();
   }
+  return exited;
 }
 
 function run(command: string, args: readonly string[]): Promise<void> {
