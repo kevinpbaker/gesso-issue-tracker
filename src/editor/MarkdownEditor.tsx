@@ -1,5 +1,5 @@
-import { BehaviorSubject, combineLatest, type Observable } from 'rxjs';
-import { distinctUntilChanged, map, shareReplay } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Subject, type Observable } from 'rxjs';
+import { distinctUntilChanged, map, shareReplay, switchMap } from 'rxjs/operators';
 
 import {
   defineModifier,
@@ -17,6 +17,18 @@ import { Button, useOverlay } from 'gesso-components';
 import { EditingService, FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { chunk } from './chunks';
+import {
+  endsCompletion,
+  filterPeople,
+  inserted,
+  queryAfter,
+  SHOWN,
+  triggerAt,
+  type Completions,
+  type Mentionable,
+  type Suggestion,
+  type Trigger
+} from './completion';
 import { copiedHtml } from './copyHtml';
 import { DocumentHistory, type Caret, type DocumentState, type EditKind } from './history';
 import { inlineRuns, inlineSlice } from './inline';
@@ -75,6 +87,12 @@ export interface MarkdownEditorProps {
   onSubmit?: () => void;
   /** Focus left the editor, having been in it: the moment to save. */
   onBlur?: () => void;
+  /**
+   * People to mention after `@`, and issues to reference after a team's
+   * key (see `completion.ts`). Read when the editor mounts; without it,
+   * nothing opens.
+   */
+  completions?: Completions;
 }
 
 interface FocusRequest {
@@ -199,6 +217,12 @@ interface BlockHandlers {
   slashKey(id: string, key: string): boolean;
   /** Turns the slash menu's block into the chosen kind. */
   slashPick(value: string): void;
+  /** A key while a mention or reference list is open over this block: true when the list took it. */
+  completionKey(id: string, key: string): boolean;
+  /** Writes the chosen suggestion in place of what was typed for it. */
+  completionPick(index: number): void;
+  /** The caret or selection in a block moved, by any means. */
+  selected(id: string, text: string, start: number, end: number): void;
   /** Switches between the formatted document and its markdown. */
   toggleSource(): void;
   /** Mod+Enter. */
@@ -212,6 +236,22 @@ interface SlashState {
   readonly index: number;
 }
 
+/** A mention or reference list, while it is open: which block, what opened it, what's typed after, what matches. */
+interface CompletionState {
+  readonly id: string;
+  readonly trigger: Trigger;
+  readonly query: string;
+  readonly items: readonly Suggestion[];
+  /** False until a reference's matches for this query arrive; a mention's are always in hand. */
+  readonly answered: boolean;
+  readonly index: number;
+}
+
+/** What a block's field says about the list open over it: a combobox, and the option the highlight is on. */
+interface Popup {
+  readonly active: UiNode | null;
+}
+
 /** What a block needs from the document around it, as cells. */
 interface Context {
   readonly cellFor: (current: Block) => Observable<Block>;
@@ -221,6 +261,8 @@ interface Context {
   readonly fields: Fields;
   /** What an empty paragraph says: the editor's placeholder while the document is empty. */
   readonly placeholder: Observable<string>;
+  /** The list open over a block, if any; only the blocks it opens and closes over hear of it. */
+  readonly popupOf: (id: string) => Observable<Popup | null>;
 }
 
 export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: ComponentContext) {
@@ -238,6 +280,114 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
   const focusService = ctx.inject(FocusService);
   const menu = useOverlay(ctx, 'slash-menu');
   const editing = ctx.inject(EditingService);
+
+  // Mentions and issue references (see `completion.ts`): the list open
+  // over a block, what can be completed, and what was last picked, for
+  // a screen reader to hear.
+  const completions = inputs.completions.value;
+  const completion = internalState<CompletionState | null>(null);
+  const completionMenu = useOverlay(ctx, 'completion-menu');
+  const announcement = internalState('');
+  let people: readonly Mentionable[] = [];
+  let prefixes: readonly string[] = [];
+  if (completions?.people !== undefined) ctx.effect(completions.people, list => (people = list));
+  if (completions?.references !== undefined) ctx.effect(completions.references.prefixes, list => (prefixes = list));
+  /** A reference's query, each asked once; an answer to an older one is dropped by `switchMap`. */
+  const asked = new Subject<{ readonly prefix: string; readonly query: string } | null>();
+  const references = completions?.references;
+  if (references !== undefined) {
+    ctx.effect(
+      asked.pipe(
+        distinctUntilChanged((a, b) => a?.prefix === b?.prefix && a?.query === b?.query),
+        switchMap(ask => (ask === null ? EMPTY : references.find(ask.prefix, ask.query).pipe(map(items => ({ ask, items })))))
+      ),
+      ({ ask, items }) => {
+        const open = completion.value;
+        if (open?.trigger.kind === 'reference' && open.query === ask.query) {
+          completion.value = { ...open, items: items.slice(0, SHOWN), answered: true, index: Math.min(open.index, Math.max(0, items.length - 1)) };
+        }
+      }
+    );
+  }
+  const closeCompletion = (): void => {
+    if (completion.value !== null) {
+      completion.value = null;
+      asked.next(null);
+    }
+  };
+  /** The list over `open`'s block with `query` typed after its trigger, or closed when nothing more can match. */
+  const completeWith = (open: Omit<CompletionState, 'query' | 'items' | 'answered' | 'index'>, query: string, index = 0): void => {
+    if (open.trigger.kind === 'mention') {
+      const items = filterPeople(people, query);
+      if (endsCompletion('mention', query, items.length)) {
+        closeCompletion();
+        return;
+      }
+      completion.value = { ...open, query, items, answered: true, index: Math.min(index, Math.max(0, items.length - 1)) };
+      return;
+    }
+    if (endsCompletion('reference', query, 0)) {
+      closeCompletion();
+      return;
+    }
+    const before = completion.value;
+    // The last answer stays up until the next arrives, so the list
+    // doesn't blink empty between keystrokes.
+    const stale = before !== null && before.id === open.id && before.trigger.start === open.trigger.start;
+    completion.value = { ...open, query, items: stale ? before.items : [], answered: stale && before.answered, index: 0 };
+    asked.next({ prefix: open.trigger.opener.slice(0, -1), query });
+  };
+  /** After the text or the caret of a block changed: open a list for a trigger just typed, or follow or close the open one. */
+  const followCompletion = (id: string, text: string, caret: number, typed: boolean): void => {
+    const open = completion.value;
+    if (open !== null && open.id === id) {
+      const query = queryAfter(text, caret, open.trigger);
+      if (query === null) closeCompletion();
+      else if (query !== open.query) completeWith(open, query, open.index);
+      return;
+    }
+    if (!typed || completions === undefined) {
+      return;
+    }
+    const trigger = triggerAt(text, caret, prefixes);
+    if (trigger === null || (trigger.kind === 'mention' ? completions.people === undefined : references === undefined)) {
+      return;
+    }
+    completeWith({ id, trigger }, '');
+  };
+
+  // Each block's field hears only about a list over itself: the open
+  // one's cell is set, and the one it left is cleared, so a keystroke
+  // in a long document wakes two cells rather than every block.
+  const popupCells = new Map<string, BehaviorSubject<Popup | null>>();
+  const popupOf = (id: string): Observable<Popup | null> => {
+    let cell = popupCells.get(id);
+    if (cell === undefined) {
+      cell = new BehaviorSubject<Popup | null>(null);
+      popupCells.set(id, cell);
+    }
+    return cell;
+  };
+  /** The options' nodes, by value, for the field's active descendant. */
+  const optionNodes = new Map<string, UiNode>();
+  const optionsChanged = new BehaviorSubject(0);
+  let popupOn: string | null = null;
+  const syncPopup = (): void => {
+    const open = completion.value;
+    if (popupOn !== null && popupOn !== open?.id) {
+      popupCells.get(popupOn)?.next(null);
+    }
+    popupOn = open?.id ?? null;
+    if (open !== null) {
+      popupOf(open.id);
+      const item = open.items[open.index];
+      const active = item === undefined ? null : (optionNodes.get(item.value) ?? null);
+      const cell = popupCells.get(open.id)!;
+      if (cell.value?.active !== active || cell.value === null) cell.next({ active });
+    }
+  };
+  ctx.effect(completion, syncPopup);
+  ctx.effect(optionsChanged, syncPopup);
 
   // Everything the views read, worked out from one document state at a
   // time. Separate streams over \`blocks\` update in subscription order,
@@ -444,10 +594,12 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       } else if (slash.value?.id === id) {
         slash.value = null;
       }
+      followCompletion(id, text, caret, grew);
       const converted = inputRule(edited);
       if (converted === null) {
         return;
       }
+      closeCompletion();
       const after = here(id, caret);
       if (converted.type === 'rule') {
         const next = block('paragraph', '');
@@ -587,6 +739,65 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       if (slash.value !== null && slash.value.id !== id) {
         slash.value = null;
       }
+      if (completion.value !== null && completion.value.id !== id) {
+        closeCompletion();
+      }
+    },
+    completionKey(id, key) {
+      const open = completion.value;
+      if (open === null || open.id !== id) {
+        return false;
+      }
+      switch (key) {
+        case 'ArrowDown':
+        case 'ArrowUp': {
+          const count = open.items.length;
+          const step = key === 'ArrowDown' ? 1 : -1;
+          completion.value = { ...open, index: count === 0 ? 0 : (open.index + step + count) % count };
+          return true;
+        }
+        case 'Enter':
+        case 'Tab':
+          if (open.items[open.index] === undefined) {
+            // Nothing to pick: the key does what it does without a list.
+            closeCompletion();
+            return false;
+          }
+          handlers.completionPick(open.index);
+          return true;
+        case 'Escape':
+          closeCompletion();
+          return true;
+        default:
+          return false;
+      }
+    },
+    completionPick(at) {
+      const open = completion.value;
+      const item = open?.items[at];
+      closeCompletion();
+      const index = open === null ? -1 : indexOf(open.id);
+      const current = blocks.value[index];
+      if (open === null || item === undefined || current === undefined) {
+        return;
+      }
+      // What was typed for it, the trigger and the query, becomes the
+      // mention or the key and a space, as one step after the typing:
+      // undo gives back `@ad`.
+      const end = open.trigger.start + open.trigger.opener.length + open.query.length;
+      const written = inserted(open.trigger.kind, item.value);
+      const rest = current.text.slice(end);
+      const text = current.text.slice(0, open.trigger.start) + written + (rest.startsWith(' ') ? '' : ' ') + rest;
+      commit(replaced(index, [{ ...current, text }]), { id: current.id, offset: open.trigger.start + written.length + 1 }, 'shortcut', here(current.id, end));
+      announcement.value = open.trigger.kind === 'mention' ? `Mentioned ${item.label}` : `Linked ${item.label}`;
+    },
+    selected(id, text, start, end) {
+      const open = completion.value;
+      if (open === null || open.id !== id) {
+        return;
+      }
+      if (start !== end) closeCompletion();
+      else followCompletion(id, text, end, false);
     },
     slashKey(id, key) {
       const open = slash.value;
@@ -638,6 +849,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         const id = node === null ? undefined : fields.block.get(node);
         const at = node === null || id === undefined ? 0 : caretToSource(blocks.value, written, { id, offset: editorFor(node).focus });
         slash.value = null;
+        closeCompletion();
         sourceText.value = written.text;
         mode.value = 'source';
         sourceRequests.send(SOURCE, at);
@@ -658,8 +870,14 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         focus(caret.id, caret.offset);
       }
     },
-    undo: () => restore(history.undo()),
-    redo: () => restore(history.redo()),
+    undo: () => {
+      closeCompletion();
+      restore(history.undo());
+    },
+    redo: () => {
+      closeCompletion();
+      restore(history.redo());
+    },
     moved: () => history.breakRun(),
     submit: () => inputs.onSubmit.value?.()
   };
@@ -677,6 +895,7 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
       }
     }
     if (inside && !within) {
+      closeCompletion();
       inputs.onBlur.value?.();
     }
     inside = within;
@@ -809,7 +1028,47 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
     }
   );
 
-  const context: Context = { cellFor, numberOf, requests, handlers, fields, placeholder };
+  // A mention or reference list opens at the character that opened it,
+  // not under the whole block as the slash menu does: a paragraph is as
+  // wide as the page, and `@` can be anywhere in it. It follows that
+  // character as the query grows (a word that wraps takes it to the next
+  // line) and as the page scrolls, and focus stays in the block.
+  ctx.effect(
+    completion.pipe(
+      map(open => (open === null ? null : `${open.id}:${open.trigger.start}:${open.trigger.kind}`)),
+      distinctUntilChanged()
+    ),
+    () => {
+      const open = completion.value;
+      const anchor = open === null ? undefined : fields.node.get(open.id);
+      if (open === null || anchor === undefined) {
+        completionMenu.hide();
+        return;
+      }
+      const at = completion.pipe(
+        map(now => {
+          const caret = now === null ? null : editing.caretRectOf(anchor, now.trigger.start);
+          return caret === null ? undefined : { x: caret.x, y: caret.y, width: 0, height: caret.height };
+        }),
+        distinctUntilChanged((a, b) => a?.x === b?.x && a?.y === b?.y && a?.height === b?.height)
+      );
+      completionMenu.show(
+        <CompletionMenu
+          state={completion}
+          kind={open.trigger.kind}
+          onPick={index => handlers.completionPick(index)}
+          onOption={(value, node) => {
+            if (node === null) optionNodes.delete(value);
+            else optionNodes.set(value, node);
+            optionsChanged.next(optionsChanged.value + 1);
+          }}
+        />,
+        { anchor, anchorRect: at, placement: 'bottom-start', offset: 4, environment: anchor }
+      );
+    }
+  );
+
+  const context: Context = { cellFor, numberOf, requests, handlers, fields, placeholder, popupOf };
   const fit = inputs.fit.value === true;
 
   const content = (
@@ -891,6 +1150,8 @@ export function MarkdownEditor(inputs: Inputs<MarkdownEditorProps>, ctx: Compone
         </Button>
       </row>
       {mode.pipe(map(m => (m === 'rich' ? editor : source)))}
+      {/* What a pick wrote, read out; no label, or it would be what's said. */}
+      <text text={announcement} role="status" live="polite" position="absolute" width={1} height={1} opacity={0} />
     </column>
   );
 
@@ -991,6 +1252,74 @@ function SlashMenu(inputs: Inputs<{ state: SlashState | null; onPick: (value: st
   );
 }
 
+/** The mention or reference list: what the query matches, the lit one the field's active descendant. */
+function CompletionMenu(
+  inputs: Inputs<{
+    state: CompletionState | null;
+    kind: 'mention' | 'reference';
+    onPick: (index: number) => void;
+    onOption: (value: string, node: UiNode | null) => void;
+  }>,
+  _ctx: ComponentContext
+) {
+  const kind = inputs.kind.value;
+  const lit = inputs.state.pipe(map(open => open?.index ?? 0));
+  const row = (item: Suggestion, index: number, count: number) => (
+    <row
+      key={item.value}
+      ref={(node: UiNode | null) => inputs.onOption.value(item.value, node)}
+      role="option"
+      label={item.label}
+      description={item.detail}
+      states={lit.pipe(map(at => (at === index ? ['selected' as const] : [])))}
+      posInSet={index + 1}
+      setSize={count}
+      onClick={() => inputs.onPick.value(index)}
+      backgroundColor={lit.pipe(map(at => (at === index ? 'controlBackgroundHovered' : 'surface')))}
+      borderRadius={6}
+      paddingLeft={10}
+      paddingRight={10}
+      height={30}
+      width={percent(100)}
+      gap={10}
+      y="center"
+      cursor="pointer">
+      {/* The name or the key whole; the handle or the title gives way. */}
+      <text text={item.label} fontSize={13} color="text" flexShrink={0} maxLines={1} />
+      {item.detail === undefined
+        ? []
+        : [<text key="detail" text={item.detail} fontSize={12} color="textMuted" flexShrink={1} minWidth={0} maxLines={1} textOverflow="ellipsis" />]}
+    </row>
+  );
+  const empty = (open: CompletionState | null): string =>
+    open !== null && !open.answered ? 'Searching…' : kind === 'mention' ? 'No one matches' : 'No issues match';
+  return (
+    <column
+      role="listbox"
+      label={kind === 'mention' ? 'Mention someone' : 'Link an issue'}
+      // A press on an option is a pick, not the start of a text
+      // selection, which would take focus out of the block first.
+      selectable={false}
+      width={kind === 'mention' ? 260 : 360}
+      padding={4}
+      gap={2}
+      backgroundColor="surface"
+      borderWidth={1}
+      borderColor="border"
+      borderRadius={8}>
+      {inputs.state.pipe(
+        map(open => open?.items ?? []),
+        distinctUntilChanged(),
+        map(items =>
+          items.length === 0
+            ? [<text key="none" text={inputs.state.pipe(map(empty))} fontSize={13} color="textMuted" padding={8} />]
+            : items.map((item, index) => row(item, index, items.length))
+        )
+      )}
+    </column>
+  );
+}
+
 /** Read after the editor's name: the keys that don't do what they do elsewhere. */
 const KEYS_HINT = 'Tab indents a list item. Escape, then Tab, moves on.';
 
@@ -1000,7 +1329,7 @@ const SOURCE = 'source';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 function BlockView(inputs: Inputs<{ block: Block; number: number; context: Context }>, _ctx: ComponentContext) {
-  const { requests, handlers, fields } = inputs.context.value;
+  const { requests, handlers, fields, popupOf } = inputs.context.value;
   const current = inputs.block;
 
   const id = current.value.id;
@@ -1017,6 +1346,19 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     if (event.currentTarget === null) {
       return;
     }
+    const model = editorFor(event.currentTarget);
+    const { shift, meta, ctrl } = event.modifiers;
+    const command = meta || ctrl;
+    // An open list takes its keys first, and they go no further: the
+    // Escape that closes one neither frees Tab to leave nor closes the
+    // dialog the editor is in. Not while an IME is composing: the arrows
+    // and Enter are choosing its candidates.
+    if (!command && !model.composing && (handlers.completionKey(id, event.key) || handlers.slashKey(id, event.key))) {
+      handlers.releaseTab(false);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     // Escape (with no menu open to close) frees the next Tab to leave;
     // any other key takes that back.
     const released = handlers.tabReleased();
@@ -1024,18 +1366,13 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     if (event.key === 'Tab' && released) {
       return;
     }
-    const model = editorFor(event.currentTarget);
     const caret = model.collapsed ? model.focus : -1;
-    const { shift, meta, ctrl } = event.modifiers;
-    const command = meta || ctrl;
     const formatting = command ? shortcutMark(event.key, shift) : null;
     if (command && shift && event.key.toLowerCase() === 'm') {
       handlers.toggleSource();
       event.preventDefault();
     } else if (command && event.key === 'Enter') {
       handlers.submit();
-      event.preventDefault();
-    } else if (!command && handlers.slashKey(id, event.key)) {
       event.preventDefault();
     } else if (formatting !== null) {
       handlers.format(id, formatting, model.start, model.end);
@@ -1082,6 +1419,7 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
     }
   };
 
+  const popup = popupOf(id).pipe(distinctUntilChanged());
   const fontSize = type === 'heading' ? HEADING_SIZES[(current.value.level ?? 1) - 1] : type === 'code' ? 13 : 15;
   const raw = type === 'raw';
   // The markers are hidden runs, still in the text, with or without the
@@ -1108,6 +1446,18 @@ function BlockView(inputs: Inputs<{ block: Block; number: number; context: Conte
       onBeforeInput={onBeforeInput}
       onFocus={() => handlers.focused(id)}
       onInput={event => handlers.input(id, event.value, event.selectionEnd)}
+      onSelectionChange={event => {
+        // An IME's text isn't typed yet: the list neither opens nor
+        // closes over it until it's committed.
+        if (event.currentTarget !== null && !editorFor(event.currentTarget).composing) {
+          handlers.selected(id, event.value, event.start, event.end);
+        }
+      }}
+      // While a mention or reference list is open over it, the field is
+      // its combobox, and the lit option is what a screen reader reads.
+      role={popup.pipe(map(open => (open === null ? undefined : ('combobox' as const))))}
+      states={popup.pipe(map(open => (open === null ? [] : ['expanded' as const])))}
+      activeDescendant={popup.pipe(map(open => open?.active ?? null))}
       modifiers={[focusRequests({ id, requests, fields })]}
     />
   );

@@ -1,11 +1,13 @@
+import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { editorFor, percent, shortcut, shortcuts, UiShortcutRegistry } from 'gesso-core';
-import { createComponent, type ComponentContext, type Inputs } from 'gesso-framework';
+import { createComponent, EditingService, type ComponentContext, type Inputs } from 'gesso-framework';
 import { renderTest, textProperty, type Rendered } from 'gesso-testing';
 
 import { bigDocument } from './bigDocument';
 
+import type { Completions } from './completion';
 import { MarkdownEditor } from './MarkdownEditor';
 
 /**
@@ -509,6 +511,250 @@ describe('the slash menu', () => {
     await caretIn('Paragraph', 0, 'end');
     await type('/to');
     expect(menu()).toBeNull();
+  });
+});
+
+describe('mentions and issue references', () => {
+  const PEOPLE = [
+    { handle: 'ada', name: 'Ada Lovelace' },
+    { handle: 'grace', name: 'Grace Hopper' },
+    { handle: 'kim', name: 'Kim Nguyen' }
+  ];
+  const ISSUES = [
+    { key: 'WEB-12', title: 'Search stops paging' },
+    { key: 'WEB-120', title: 'Login loops' },
+    { key: 'WEB-7', title: 'Dark mode flickers' },
+    { key: 'API-12', title: 'Rate limits' }
+  ];
+  /** What the tracker hands the editor, here from fixed lists: issues by key number or title word. */
+  const completions: Completions = {
+    people: of(PEOPLE),
+    references: {
+      prefixes: of(['WEB', 'API']),
+      find: (prefix, query) =>
+        of(
+          ISSUES.filter(
+            issue =>
+              issue.key.startsWith(`${prefix}-`) &&
+              (issue.key.slice(prefix.length + 1).startsWith(query) || issue.title.toLowerCase().includes(query.toLowerCase()))
+          ).map(issue => ({ value: issue.key, label: issue.key, detail: issue.title }))
+        )
+    }
+  };
+
+  async function mountWith(markdown: string): Promise<void> {
+    ui = renderTest(createComponent(MarkdownEditor, { value: markdown, showSource: true, completions }), { width: 900, height: 600 });
+    await ui.settle();
+  }
+
+  const list = (name: string) => ui.queryByRole('listbox', { name });
+  const options = (): string[] => ui.getAllByRole('option').map(option => ui.getSemantics(option).label ?? '');
+  const field = () => ui.getAllByRole('combobox')[0]!;
+  const said = (): string => textProperty(ui.getByRole('status')) ?? '';
+  /** Types a character at a time, as a person does: a list opens for a character typed, not for text inserted whole. */
+  async function keys(text: string): Promise<void> {
+    for (const char of text) await type(char);
+  }
+
+  it('offers people after @, filters by name and handle, and writes the handle picked', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await type('Thanks @');
+    expect(list('Mention someone')).not.toBeNull();
+    expect(options()).toEqual(['Ada Lovelace', 'Grace Hopper', 'Kim Nguyen']);
+    await type('h');
+    // "h" starts Hopper; Grace's handle has none, Kim's name has none.
+    expect(options()).toEqual(['Grace Hopper']);
+    await press('Backspace');
+    await type('a');
+    // A name's start first, then anywhere in one.
+    expect(options()).toEqual(['Ada Lovelace', 'Grace Hopper']);
+    await press('ArrowDown');
+    await press('Enter');
+    expect(list('Mention someone')).toBeNull();
+    await type('for the fix');
+    expect(source()).toBe('Thanks @grace for the fix');
+  });
+
+  it('picks with the pointer, keeping the caret in the block', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await type('@');
+    // Pressed on the name's text, through the hit tester, as a mouse does.
+    const name = ui.getVisibleBox(ui.getByText('Kim Nguyen'));
+    ui.fireEvent.pointerDown(name.x + 4, name.y + 4);
+    ui.fireEvent.pointerUp(name.x + 4, name.y + 4);
+    await ui.settle();
+    expect(source()).toBe('@kim ');
+    await type('hi');
+    expect(source()).toBe('@kim hi');
+  });
+
+  it('is one undo step after the typing, and says what it wrote', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await keys('cc @gr');
+    await press('Tab');
+    // With the space a name is followed by, so typing goes straight on.
+    expect(source()).toBe('cc @grace ');
+    expect(said()).toBe('Mentioned Grace Hopper');
+    await press('z', { meta: true });
+    expect(source()).toBe('cc @gr');
+    await press('z', { meta: true });
+    expect(source()).toBe('');
+  });
+
+  it('closes on Escape, leaving the text as typed, and on a space that matches no one', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await keys('@ad');
+    await press('Escape');
+    expect(list('Mention someone')).toBeNull();
+    await type('a');
+    // Closed by Escape, it stays closed for the rest of the word.
+    expect(list('Mention someone')).toBeNull();
+    expect(source()).toBe('@ada');
+    await keys(' and @kim');
+    expect(options()).toEqual(['Kim Nguyen']);
+    await type(' ');
+    // "kim " still starts "Kim Nguyen".
+    expect(list('Mention someone')).not.toBeNull();
+    await keys('said ');
+    expect(list('Mention someone')).toBeNull();
+    expect(source()).toBe('@ada and @kim said ');
+  });
+
+  it('opens only at the start of a word, and for a character typed', async () => {
+    await mountWith('mail me@x');
+    await caretIn('Paragraph', 0, 'end');
+    await type('@');
+    expect(list('Mention someone')).toBeNull();
+    await keys(' @ ');
+    expect(list('Mention someone')).toBeNull();
+    expect(source()).toBe('mail me@x@ @ ');
+  });
+
+  it('closes when the caret leaves the word or focus leaves the block', async () => {
+    await mountWith('one\n\ntwo');
+    await caretIn('Paragraph', 0, 'end');
+    await keys(' @a');
+    expect(list('Mention someone')).not.toBeNull();
+    await press('ArrowLeft');
+    expect(list('Mention someone')).not.toBeNull();
+    await press('ArrowLeft');
+    await press('ArrowLeft');
+    expect(list('Mention someone')).toBeNull();
+    await caretIn('Paragraph', 0, 'end');
+    await type('d');
+    expect(list('Mention someone')).toBeNull();
+    await keys(' @');
+    expect(list('Mention someone')).not.toBeNull();
+    // The second paragraph, the only textbox while the first is a combobox.
+    await caretIn('Paragraph', 0, 0);
+    expect(list('Mention someone')).toBeNull();
+  });
+
+  it("makes the block a combobox while it's open, its highlight the active option", async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await type('@');
+    const combobox = field();
+    expect(ui.getSemantics(combobox).label).toBe('Paragraph');
+    expect(ui.getSemantics(combobox).states).toContain('expanded');
+    const active = () => ui.getAllByRole('option').find(option => option.id === ui.getSemantics(combobox).activeDescendant);
+    expect(ui.getSemantics(active()!).label).toBe('Ada Lovelace');
+    expect(ui.getSemantics(active()!).description).toBe('@ada');
+    await press('ArrowUp');
+    expect(ui.getSemantics(active()!).label).toBe('Kim Nguyen');
+    expect(ui.getSemantics(active()!).states).toContain('selected');
+    await press('Escape');
+    expect(ui.queryByRole('combobox')).toBeNull();
+    expect(ui.getAllByRole('textbox', { name: 'Paragraph' })).toHaveLength(1);
+  });
+
+  it('opens under the @, wherever it is on the line, and follows it when the word wraps', async () => {
+    await mountWith('A sentence first');
+    await caretIn('Paragraph', 0, 'end');
+    await keys(' @');
+    const block = ui.getVisibleBox(field());
+    const at = () => ui.getVisibleBox(list('Mention someone')!);
+    const { x, y } = at();
+    expect(x).toBeGreaterThan(block.x + 100);
+    expect(y).toBeGreaterThan(block.y);
+    await keys('gr');
+    expect(at()).toMatchObject({ x, y });
+    // Typed on to the end of the line: the name wraps, and the list goes with it.
+    await press('Escape');
+    const caret = () => ui.runtime.services.get(EditingService).caretRectOf(ui.getAllByRole('textbox', { name: 'Paragraph' })[0]!)!;
+    while (caret().x < block.width - 40) await type(' a');
+    await keys(' @');
+    const end = at();
+    expect(end.x).toBeGreaterThan(block.x + 200);
+    // A name no one has: the list stays open, saying so, and the word is long enough to wrap.
+    await keys('kimberley');
+    expect(at().x).toBeLessThan(end.x);
+    expect(at().y).toBeGreaterThan(end.y);
+  });
+
+  it("offers a team's issues after its key and a dash, and writes the key picked", async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await keys('Duplicate of WEB-');
+    expect(list('Link an issue')).not.toBeNull();
+    expect(options()).toEqual(['WEB-12', 'WEB-120', 'WEB-7']);
+    await keys('12');
+    expect(options()).toEqual(['WEB-12', 'WEB-120']);
+    await press('ArrowDown');
+    await press('Enter');
+    expect(source()).toBe('Duplicate of WEB-120 ');
+    expect(said()).toBe('Linked WEB-120');
+    await keys('and API-');
+    await keys('rate');
+    expect(options()).toEqual(['API-12']);
+    await press('Tab');
+    expect(source()).toBe('Duplicate of WEB-120 and API-12 ');
+  });
+
+  it('leaves a reference typed out alone, and a key that is no team', async () => {
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await keys('WEB-7');
+    expect(list('Link an issue')).not.toBeNull();
+    await keys(' is ');
+    expect(list('Link an issue')).toBeNull();
+    await keys('web- or XYZ- or a WEB-');
+    expect(list('Link an issue')).not.toBeNull();
+    await press('Escape');
+    expect(source()).toBe('WEB-7 is web- or XYZ- or a WEB-');
+  });
+
+  it("neither opens nor closes over an IME's composition, nor takes its keys", async () => {
+    const editing = () => ui.runtime.input.editing;
+    await mountWith('');
+    await caretIn('Paragraph', 0, 0);
+    await type('@');
+    editing().compositionStart();
+    editing().compositionUpdate('か ', 2);
+    await ui.settle();
+    // A space in the composition would close it, if it were typed.
+    expect(list('Mention someone')).not.toBeNull();
+    await press('ArrowDown');
+    const combobox = field();
+    const active = ui.getAllByRole('option').find(option => option.id === ui.getSemantics(combobox).activeDescendant);
+    expect(ui.getSemantics(active!).label).toBe('Ada Lovelace');
+    editing().compositionEnd('か');
+    await ui.settle();
+    expect(list('Mention someone')).not.toBeNull();
+    expect(ui.queryByRole('option')).toBeNull();
+    expect(source()).toBe('@か');
+  });
+
+  it('opens nothing without completions to offer', async () => {
+    await mount('');
+    await caretIn('Paragraph', 0, 0);
+    await keys('@ad WEB-');
+    expect(ui.queryByRole('listbox')).toBeNull();
+    expect(source()).toBe('@ad WEB-');
   });
 });
 
